@@ -1,0 +1,71 @@
+{
+  "name": "kasane",
+  "version": "0.1.0",
+  "description": "Lint, explain, and compare context for AI coding agents.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Maaa2005",
+  "homepage": "https://github.com/Maaa2005/KASANE#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Maaa2005/KASANE.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Maaa2005/KASANE/issues"
+  },
+  "keywords": [
+    "cli",
+    "lint",
+    "ai",
+    "agents",
+    "codex",
+    "claude",
+    "cursor",
+    "gemini",
+    "copilot",
+    "mcp",
+    "context"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "kasane": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.2",
+    "gray-matter": "^4.0.3",
+    "ignore": "^5.3.1",
+    "js-tiktoken": "^1.0.15",
+    "minimatch": "^10.2.5",
+    "remark-parse": "^11.0.0",
+    "unified": "^11.0.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/node": "^20.14.0",
+    "eslint": "^9.9.0",
+    "prettier": "^3.3.3",
+    "tsup": "^8.2.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.0.5"
+  }
+}

@@ -1,0 +1,1 @@
+Use GraphQL for authentication.

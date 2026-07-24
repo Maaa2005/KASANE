@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an idea for KASANE
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Before requesting, please check 計画書.md §3.2 (MVPで実装しないもの)
+        and §23 (実装時の禁止事項). Web UI, a desktop app, VSCode extension,
+        auto-fix, LLM-based semantic analysis, cloud data upload, user
+        accounts, and telemetry are explicitly out of scope for v0.1.x and
+        will not be accepted.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that KASANE doesn't support today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

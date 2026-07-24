@@ -1,0 +1,32 @@
+name: Unsupported config file format
+description: Report an AI agent config file format KASANE doesn't detect or parse yet
+labels: ["good first issue", "unsupported-format"]
+body:
+  - type: input
+    id: agent
+    attributes:
+      label: Which AI agent / tool uses this config file?
+      placeholder: e.g. Windsurf, Cline, Roo, Amazon Q, JetBrains AI
+    validations:
+      required: true
+  - type: input
+    id: filepath
+    attributes:
+      label: File path / pattern
+      placeholder: e.g. .windsurfrules, .roo/rules/**/*.md
+    validations:
+      required: true
+  - type: textarea
+    id: format
+    attributes:
+      label: File format and scoping rules
+      description: >
+        How is the file structured (plain text, markdown, frontmatter,
+        JSON)? Does it apply repo-wide, per-directory, or via globs?
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample file content
+      render: text

@@ -1,0 +1,6 @@
+---
+globs:
+  - "src/**/*.ts"
+---
+
+Use strict TypeScript types.
