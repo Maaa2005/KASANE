@@ -13,9 +13,7 @@ describe("analyzeRepository (basic-repo fixture)", () => {
     const relativePaths = result.sources.map((source) => source.relativePath);
     expect(relativePaths).toContain("AGENTS.md");
     expect(relativePaths).toContain("CLAUDE.md");
-    expect(relativePaths).toContain(
-      path.join(".cursor", "rules", "typescript.mdc"),
-    );
+    expect(relativePaths).toContain(".cursor/rules/typescript.mdc");
   });
 
   it("excludes files inside node_modules", async () => {

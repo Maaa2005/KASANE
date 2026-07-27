@@ -19,7 +19,7 @@ describe("resolveEffectiveContext (scoped-repo fixture)", () => {
 
     const relativePaths = effective.sources.map((s) => s.relativePath);
     expect(relativePaths).toContain("CLAUDE.md");
-    expect(relativePaths).toContain(path.join("src", "CLAUDE.md"));
+    expect(relativePaths).toContain("src/CLAUDE.md");
   });
 
   it("excludes the nested CLAUDE.md for a file outside src/", async () => {
@@ -33,7 +33,7 @@ describe("resolveEffectiveContext (scoped-repo fixture)", () => {
 
     const relativePaths = effective.sources.map((s) => s.relativePath);
     expect(relativePaths).toContain("CLAUDE.md");
-    expect(relativePaths).not.toContain(path.join("src", "CLAUDE.md"));
+    expect(relativePaths).not.toContain("src/CLAUDE.md");
   });
 
   it("includes a cursor rule only when the target path matches its glob", async () => {
@@ -50,7 +50,7 @@ describe("resolveEffectiveContext (scoped-repo fixture)", () => {
     });
 
     expect(matching.sources.map((s) => s.relativePath)).toContain(
-      path.join(".cursor", "rules", "typescript.mdc"),
+      ".cursor/rules/typescript.mdc",
     );
     expect(nonMatching.sources).toEqual([]);
   });
@@ -77,7 +77,7 @@ describe("resolveEffectiveContext (scoped-repo fixture)", () => {
 
     const relativePaths = effective.sources.map((s) => s.relativePath);
     expect(relativePaths).toContain("CLAUDE.md");
-    expect(relativePaths).toContain(path.join("src", "CLAUDE.md"));
+    expect(relativePaths).toContain("src/CLAUDE.md");
     expect(effective.targetPath).toBeUndefined();
   });
 });
