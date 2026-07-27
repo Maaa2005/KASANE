@@ -94,8 +94,31 @@ Copilot) in the same repository causes problems that are hard to see:
 - One specific agent behaves differently and nobody knows why
 
 KASANE reconstructs the effective context each agent actually receives and
-explains where these problems come from — instead of just listing which
-files exist.
+explains where these problems come from, rather than listing which files
+exist.
+
+### Compared to other tools
+
+Linting agent context files is not a new idea, and two of these tools do
+parts of it better than KASANE does.
+
+| Tool | What it does | Overlap with KASANE |
+| --- | --- | --- |
+| [agentlinter](https://github.com/seojoonkim/agentlinter) | "ESLint for AI Agents". Scores and auto-fixes `AGENTS.md`/`CLAUDE.md`, warns about rules buried mid-file where models attend less, checks token efficiency and secrets. | Large. Its rule set is broader than KASANE's seven, and it fixes what it finds. |
+| [ai-context-kit](https://github.com/ofershap/ai-context-kit) | Measures per-file token cost against a budget, detects conflicts and duplicates, and picks the rules relevant to one task. | Large, and its `select()` has no KASANE equivalent. |
+| [cursor-doctor](https://github.com/nedcodes-ok/cursor-doctor) | 100+ checks for Cursor rules specifically, with editor quick-fixes. | Cursor only. Deeper than KASANE there. |
+
+What none of them do is answer **"why does this one agent behave
+differently from the others?"**. They validate files. KASANE resolves each
+file down to the instructions a single agent actually ends up with for a
+single target path, then diffs that between agents — which is what
+`kasane diff` and `kasane explain --path` are for.
+
+If you want autofix or a per-task context budget, use one of the tools
+above. Reach for KASANE when agents disagree and you need to see why.
+
+(Checked against each repository in July 2026. Star counts and activity
+move; go look before believing a comparison table.)
 
 ## Install
 
@@ -199,22 +222,19 @@ formats are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) and our
 
 See [SECURITY.md](./SECURITY.md) for how to report a vulnerability.
 
-## Manual publish checklist
+## Release checklist
 
-The following steps are **not** performed automatically and require a human
-to run them once the repository and npm package are ready:
+Kept here as a record of how v0.2.0 was released. Only step 7 is still open.
 
-1. `git init` and push this repository to `https://github.com/Maaa2005/KASANE`
-   (default branch `main`)
+1. Done: pushed to https://github.com/Maaa2005/KASANE (default branch `main`)
 2. Done: `kasane` was already taken on npm, so the package is published as
    `kasane-cli` (`package.json` `name`), with the binary still named `kasane`
 3. Done: `docs/make-demo.sh` records `docs/demo.gif`, embedded at the top of
    this README
-4. Update [1.4 競合との違い](./計画書.md) / the "Why KASANE" section with a
-   concrete competitor comparison
-5. `npm login`, then `npm publish` (or tag-push to trigger
-   `.github/workflows/publish.yml`) for the `v0.2.0` release
-6. Create a GitHub Release / tag `v0.2.0`
+4. Done: "Why KASANE" carries a comparison against agentlinter,
+   ai-context-kit and cursor-doctor
+5. Done: published as `kasane-cli@0.2.0` by tag-pushing `v0.2.0`
+6. Done: https://github.com/Maaa2005/KASANE/releases/tag/v0.2.0
 7. Post the initial announcement per the launch plan (計画書.md §26)
 
 ## Changelog

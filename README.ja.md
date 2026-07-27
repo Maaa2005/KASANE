@@ -96,6 +96,29 @@ Cursor、Gemini CLI、Copilot)を使うと、次のような問題が見えに�
 KASANEは各エージェントが実際に受け取る有効コンテキストを再現し、
 ファイルの一覧を出すだけでなく、問題の原因を説明します。
 
+### 他ツールとの比較
+
+エージェントの設定ファイルをlintする発想は新しくありません。下の2つは、
+一部の機能ではKASANEより優れています。
+
+| ツール | 何をするか | KASANEとの重なり |
+| --- | --- | --- |
+| [agentlinter](https://github.com/seojoonkim/agentlinter) | 「AIエージェント版ESLint」。`AGENTS.md`/`CLAUDE.md`を採点・自動修正し、モデルが読み飛ばしやすいファイル中央部のルールを警告、トークン効率と秘密情報も検査する。 | 大きい。ルール数はKASANEの7個より多く、しかも自動修正まで行う。 |
+| [ai-context-kit](https://github.com/ofershap/ai-context-kit) | ファイルごとのトークン量を予算と照合し、矛盾と重複を検出。タスクに関係するルールだけを選ぶ`select()`を持つ。 | 大きい。`select()`に相当する機能はKASANEにない。 |
+| [cursor-doctor](https://github.com/nedcodes-ok/cursor-doctor) | Cursorのルール専用に100項目以上を診断し、エディタ上で自動修正する。 | Cursor限定。その範囲ではKASANEより深い。 |
+
+どれもやっていないのが、**「なぜこのエージェントだけ挙動が違うのか」**への
+回答です。3つともファイル単体を検証します。KASANEは各ファイルを、
+1つのエージェントが特定のファイルを編集するときに実際に受け取る指示まで
+解決してから、それをエージェント間で差分にします。`kasane diff` と
+`kasane explain --path` はそのためにあります。
+
+自動修正やタスク単位のトークン予算が欲しいなら上のツールを使ってください。
+KASANEは、エージェント同士が食い違っていて原因を知りたいときに使います。
+
+(各リポジトリを2026年7月に確認した内容です。スター数も活動状況も動くので、
+比較表を信じる前に実物を見てください。)
+
 ## インストール
 
 ```bash
@@ -190,19 +213,17 @@ Claude・Geminiなど他モデルの正確なトークン数とは一致しま�
 
 脆弱性の報告方法は[SECURITY.md](./SECURITY.md)を参照してください。
 
-## 公開作業チェックリスト(手動)
+## リリース作業チェックリスト
 
-以下はすべて自動化しておらず、リポジトリ・npmパッケージの準備が
-整った後に人間が実行する必要があります。
+v0.2.0をどう公開したかの記録として残しています。未完了は7だけです。
 
-1. `git init`し、`https://github.com/Maaa2005/KASANE`(デフォルトブランチ`main`)へpush
+1. 対応済み: https://github.com/Maaa2005/KASANE (デフォルトブランチ`main`)へpush済み
 2. 対応済み: npmで`kasane`は使用済みだったため、公開名は`kasane-cli`(`package.json`の`name`)。
    コマンド名は`kasane`のまま
 3. 対応済み: `docs/make-demo.sh` で `docs/demo.gif` を生成し、README冒頭に埋め込み済み
-4. 「なぜKASANEが必要か」節を、実際の競合調査結果に基づく比較に更新する(計画書§1.4)
-5. `npm login`後、`npm publish`(またはタグpushで`.github/workflows/publish.yml`を起動)し、
-   `v0.2.0`をリリースする
-6. GitHub Releaseとタグ`v0.2.0`を作成する
+4. 対応済み: 「なぜKASANEが必要か」にagentlinter / ai-context-kit / cursor-doctorとの比較を記載
+5. 対応済み: `v0.2.0`タグpushで`kasane-cli@0.2.0`として公開
+6. 対応済み: https://github.com/Maaa2005/KASANE/releases/tag/v0.2.0
 7. 計画書§26の公開・プロモーション計画に沿って初期告知を行う
 
 ## 変更履歴
