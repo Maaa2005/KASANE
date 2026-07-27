@@ -12,14 +12,12 @@ broken references, context bloat, and differences between coding agents.
 
 日本語版READMEは [README.ja.md](./README.ja.md) を参照してください。
 
-<!--
-TODO(before launch): replace this with a recorded terminal demo
-(GIF or asciinema) showing `kasane inspect` / `explain` / `diff`.
-Recording and publishing the demo is a manual, human step — see
-"Manual publish checklist" below.
--->
+![kasane inspect, diff and explain running against an example repository](https://raw.githubusercontent.com/Maaa2005/KASANE/main/docs/demo.gif)
 
 ## 30-second example
+
+A repository with an `AGENTS.md`, a `CLAUDE.md`, a nested `src/CLAUDE.md`,
+a Cursor rule, Copilot instructions and an MCP config:
 
 ```bash
 npx kasane-cli inspect
@@ -29,27 +27,59 @@ npx kasane-cli inspect
 KASANE
 
 Repository:
-  /Users/example/project
+  /private/tmp/acme-web
 
 Detected:
-  ✓ AGENTS.md
-  ✓ CLAUDE.md
-  ✓ 3 Cursor rules
-  ✓ 2 MCP servers
+  ✓ .cursor/rules/typescript.mdc (Cursor rule)
+  ✓ .github/copilot-instructions.md (Copilot instructions)
+  ✓ .mcp.json (MCP server config)
+  ✓ AGENTS.md (AGENTS.md)
+  ✓ CLAUDE.md (CLAUDE.md)
+  ✓ src/CLAUDE.md (CLAUDE.md)
 
 Context:
-  7 files
-  8,421 estimated tokens
-  36 instructions
+  6 files
+  143 estimated tokens
+  10 instructions
 
 Issues:
-  2 duplicated instructions
-  1 broken file reference
-  1 package-manager conflict
-  1 possible secret
+  2 error(s), 2 warning(s), 0 info
 
-Run `kasane explain --agent claude` for details.
+  [warning] KASANE001 .github/copilot-instructions.md:1 — Duplicated instruction
+    The same instruction appears in 3 files: "Write tests for new features."
+  [error] KASANE002 AGENTS.md:9 — Broken file reference
+    docs/architecture.md does not exist
+  [error] KASANE003 CLAUDE.md:7 — Missing package.json script
+    "pnpm run lint:fix" is referenced but package.json has no "lint:fix" script
+  [warning] KASANE004 AGENTS.md:7 — Package manager mismatch
+    Instruction mentions "npm" but the repository lockfile indicates "pnpm"
 ```
+
+Then ask why one agent behaves differently from another:
+
+```bash
+kasane diff --agents codex,claude
+```
+
+```text
+Context difference
+
+Codex only:
+  + Run `pnpm test` before every commit.
+  + Use npm for installing dependencies.
+  + See the architecture notes before large changes.
+
+Claude Code only:
+  + Use pnpm for installing dependencies.
+  + Run `pnpm lint:fix` after editing.
+  + Prefer named exports in this directory.
+
+Common:
+  Write tests for new features.
+```
+
+Both listings are verbatim output. `docs/make-demo.sh` builds that example
+repository and re-records the GIF above.
 
 ## Why KASANE
 
@@ -178,8 +208,8 @@ to run them once the repository and npm package are ready:
    (default branch `main`)
 2. Done: `kasane` was already taken on npm, so the package is published as
    `kasane-cli` (`package.json` `name`), with the binary still named `kasane`
-3. Record a terminal demo (GIF or asciinema) of `inspect` / `explain` /
-   `diff` and embed it at the top of this README
+3. Done: `docs/make-demo.sh` records `docs/demo.gif`, embedded at the top of
+   this README
 4. Update [1.4 競合との違い](./計画書.md) / the "Why KASANE" section with a
    concrete competitor comparison
 5. `npm login`, then `npm publish` (or tag-push to trigger

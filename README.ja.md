@@ -12,13 +12,12 @@ instructions・MCP設定を解析し、重複した指示・存在しないフ�
 
 English README: [README.md](./README.md)
 
-<!--
-TODO(公開前): `kasane inspect` / `explain` / `diff` を実際に動かした
-GIFまたはasciinemaに差し替える。デモの録画・公開は人間が行う手動作業
-(下記「公開作業チェックリスト」参照)。
--->
+![kasane inspect / diff / explain を実際のリポジトリで実行したデモ](https://raw.githubusercontent.com/Maaa2005/KASANE/main/docs/demo.gif)
 
 ## 30秒でわかる使い方
+
+`AGENTS.md`・`CLAUDE.md`・ネストした `src/CLAUDE.md`・Cursorルール・
+Copilot instructions・MCP設定があるリポジトリの場合:
 
 ```bash
 npx kasane-cli inspect
@@ -28,27 +27,59 @@ npx kasane-cli inspect
 KASANE
 
 Repository:
-  /Users/example/project
+  /private/tmp/acme-web
 
 Detected:
-  ✓ AGENTS.md
-  ✓ CLAUDE.md
-  ✓ 3 Cursor rules
-  ✓ 2 MCP servers
+  ✓ .cursor/rules/typescript.mdc (Cursor rule)
+  ✓ .github/copilot-instructions.md (Copilot instructions)
+  ✓ .mcp.json (MCP server config)
+  ✓ AGENTS.md (AGENTS.md)
+  ✓ CLAUDE.md (CLAUDE.md)
+  ✓ src/CLAUDE.md (CLAUDE.md)
 
 Context:
-  7 files
-  8,421 estimated tokens
-  36 instructions
+  6 files
+  143 estimated tokens
+  10 instructions
 
 Issues:
-  2 duplicated instructions
-  1 broken file reference
-  1 package-manager conflict
-  1 possible secret
+  2 error(s), 2 warning(s), 0 info
 
-Run `kasane explain --agent claude` for details.
+  [warning] KASANE001 .github/copilot-instructions.md:1 — Duplicated instruction
+    The same instruction appears in 3 files: "Write tests for new features."
+  [error] KASANE002 AGENTS.md:9 — Broken file reference
+    docs/architecture.md does not exist
+  [error] KASANE003 CLAUDE.md:7 — Missing package.json script
+    "pnpm run lint:fix" is referenced but package.json has no "lint:fix" script
+  [warning] KASANE004 AGENTS.md:7 — Package manager mismatch
+    Instruction mentions "npm" but the repository lockfile indicates "pnpm"
 ```
+
+「なぜこのエージェントだけ挙動が違うのか」はこう調べます:
+
+```bash
+kasane diff --agents codex,claude
+```
+
+```text
+Context difference
+
+Codex only:
+  + Run `pnpm test` before every commit.
+  + Use npm for installing dependencies.
+  + See the architecture notes before large changes.
+
+Claude Code only:
+  + Use pnpm for installing dependencies.
+  + Run `pnpm lint:fix` after editing.
+  + Prefer named exports in this directory.
+
+Common:
+  Write tests for new features.
+```
+
+上の2つはどちらも実際の出力そのままです。この例リポジトリの生成と
+GIFの再録画は `docs/make-demo.sh` で行えます。
 
 ## なぜKASANEが必要か
 
@@ -167,8 +198,7 @@ Claude・Geminiなど他モデルの正確なトークン数とは一致しま�
 1. `git init`し、`https://github.com/Maaa2005/KASANE`(デフォルトブランチ`main`)へpush
 2. 対応済み: npmで`kasane`は使用済みだったため、公開名は`kasane-cli`(`package.json`の`name`)。
    コマンド名は`kasane`のまま
-3. `inspect` / `explain` / `diff`を実行したターミナルデモ(GIFまたはasciinema)を録画し、
-   README冒頭に埋め込む
+3. 対応済み: `docs/make-demo.sh` で `docs/demo.gif` を生成し、README冒頭に埋め込み済み
 4. 「なぜKASANEが必要か」節を、実際の競合調査結果に基づく比較に更新する(計画書§1.4)
 5. `npm login`後、`npm publish`(またはタグpushで`.github/workflows/publish.yml`を起動)し、
    `v0.2.0`をリリースする
