@@ -13,6 +13,9 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 First published release. Fixes found by a cross-model review of the 0.1.0
 tree; several change output shape, which is why this is a minor bump.
 
+Published to npm as `kasane-cli` — `kasane` was already taken by an
+unrelated package. The installed command is still `kasane`.
+
 ### Security
 
 - `--format json` no longer emits each config file's full text by default.

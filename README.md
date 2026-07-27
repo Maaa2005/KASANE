@@ -1,8 +1,8 @@
 # KASANE
 
 [![CI](https://github.com/Maaa2005/KASANE/actions/workflows/ci.yml/badge.svg)](https://github.com/Maaa2005/KASANE/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/kasane.svg)](https://www.npmjs.com/package/kasane)
-[![license](https://img.shields.io/npm/l/kasane.svg)](./LICENSE)
+[![npm version](https://img.shields.io/npm/v/kasane-cli.svg)](https://www.npmjs.com/package/kasane-cli)
+[![license](https://img.shields.io/npm/l/kasane-cli.svg)](./LICENSE)
 
 > Debug the context your AI coding agents actually receive.
 
@@ -22,7 +22,7 @@ Recording and publishing the demo is a manual, human step — see
 ## 30-second example
 
 ```bash
-npx kasane inspect
+npx kasane-cli inspect
 ```
 
 ```text
@@ -70,10 +70,12 @@ files exist.
 ## Install
 
 ```bash
-npx kasane inspect
+npx kasane-cli inspect
 # or
-npm install -g kasane
+npm install -g kasane-cli
 ```
+
+The published package is `kasane-cli`; the command it installs is `kasane`.
 
 Requires Node.js >= 20.
 
@@ -174,9 +176,8 @@ to run them once the repository and npm package are ready:
 
 1. `git init` and push this repository to `https://github.com/Maaa2005/KASANE`
    (default branch `main`)
-2. Confirm the `kasane` name is available on npm (`npm view kasane`); if
-   taken, update the `name` field in `package.json` (the single place the
-   published package name is defined) and the badge URLs above
+2. Done: `kasane` was already taken on npm, so the package is published as
+   `kasane-cli` (`package.json` `name`), with the binary still named `kasane`
 3. Record a terminal demo (GIF or asciinema) of `inspect` / `explain` /
    `diff` and embed it at the top of this README
 4. Update [1.4 競合との違い](./計画書.md) / the "Why KASANE" section with a

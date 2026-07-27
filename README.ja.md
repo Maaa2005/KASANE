@@ -1,8 +1,8 @@
 # KASANE
 
 [![CI](https://github.com/Maaa2005/KASANE/actions/workflows/ci.yml/badge.svg)](https://github.com/Maaa2005/KASANE/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/kasane.svg)](https://www.npmjs.com/package/kasane)
-[![license](https://img.shields.io/npm/l/kasane.svg)](./LICENSE)
+[![npm version](https://img.shields.io/npm/v/kasane-cli.svg)](https://www.npmjs.com/package/kasane-cli)
+[![license](https://img.shields.io/npm/l/kasane-cli.svg)](./LICENSE)
 
 > AIコーディングエージェントが実際に受け取っているコンテキストをデバッグする。
 
@@ -21,7 +21,7 @@ GIFまたはasciinemaに差し替える。デモの録画・公開は人間が�
 ## 30秒でわかる使い方
 
 ```bash
-npx kasane inspect
+npx kasane-cli inspect
 ```
 
 ```text
@@ -68,10 +68,12 @@ KASANEは各エージェントが実際に受け取る有効コンテキスト�
 ## インストール
 
 ```bash
-npx kasane inspect
+npx kasane-cli inspect
 # または
-npm install -g kasane
+npm install -g kasane-cli
 ```
+
+公開パッケージ名は `kasane-cli`、インストールされるコマンド名は `kasane` です。
 
 Node.js >= 20 が必要です。
 
@@ -163,8 +165,8 @@ Claude・Geminiなど他モデルの正確なトークン数とは一致しま�
 整った後に人間が実行する必要があります。
 
 1. `git init`し、`https://github.com/Maaa2005/KASANE`(デフォルトブランチ`main`)へpush
-2. npmで`kasane`という名前が利用可能か確認(`npm view kasane`)。使用不可の場合は
-   `package.json`の`name`(公開名を定義する唯一の場所)とバッジURLを更新する
+2. 対応済み: npmで`kasane`は使用済みだったため、公開名は`kasane-cli`(`package.json`の`name`)。
+   コマンド名は`kasane`のまま
 3. `inspect` / `explain` / `diff`を実行したターミナルデモ(GIFまたはasciinema)を録画し、
    README冒頭に埋め込む
 4. 「なぜKASANEが必要か」節を、実際の競合調査結果に基づく比較に更新する(計画書§1.4)
