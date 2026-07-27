@@ -39,11 +39,11 @@ export function resolveEffectiveContext(
     if (!targetDir) return true;
     if (instruction.scope.type === "repository") return true;
     if (instruction.scope.type === "directory") {
-      return isAncestorDir(instruction.scope.value, targetDir);
+      return isAncestorDir(instruction.scope.patterns[0], targetDir);
     }
-    return instruction.scope.value
-      .split("|")
-      .some((pattern) => minimatch(targetRelativePath as string, pattern));
+    return instruction.scope.patterns.some((pattern) =>
+      minimatch(targetRelativePath as string, pattern),
+    );
   });
 
   const includedPaths = new Set(

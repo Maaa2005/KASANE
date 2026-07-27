@@ -66,7 +66,14 @@ export interface ContextInstruction {
   agents: AgentType[];
   scope: {
     type: "repository" | "directory" | "glob";
-    value: string;
+    /**
+     * For "repository" this is `["."]`, for "directory" a single
+     * repository-relative directory, and for "glob" one or more
+     * repository-relative minimatch patterns (Cursor `globs` frontmatter
+     * accepts both a scalar and a list, and each entry is kept intact so
+     * extglob syntax such as `@(a|b)` survives).
+     */
+    patterns: string[];
   };
   content: string;
   normalizedContent: string;
@@ -101,11 +108,24 @@ export interface DiffConflict {
   values: Partial<Record<AgentType, string>>;
 }
 
+export interface SharedInstruction {
+  agents: AgentType[];
+  instruction: ContextInstruction;
+}
+
 export interface DiffResult {
   targetPath?: string;
   agents: AgentType[];
   perAgent: Record<string, EffectiveContext>;
+  /** Instructions that reach exactly one of the compared agents. */
   onlyIn: Record<string, ContextInstruction[]>;
+  /** Instructions that reach every compared agent. */
   common: ContextInstruction[];
+  /**
+   * Instructions that reach more than one but not all of the compared
+   * agents. Without this, a three-way comparison silently drops anything
+   * two agents share.
+   */
+  sharedBy: SharedInstruction[];
   conflicts: DiffConflict[];
 }

@@ -14,7 +14,7 @@ interface InspectOptions {
   root: string;
   format: "text" | "json";
   failOn?: Severity;
-  verbose?: boolean;
+  includeContent?: boolean;
 }
 
 export function registerInspectCommand(program: Command): void {
@@ -27,7 +27,11 @@ export function registerInspectCommand(program: Command): void {
       "--fail-on <severity>",
       "exit with code 1 if a diagnostic at or above this severity is found (warning|error)",
     )
-    .option("--verbose", "show additional detail", false)
+    .option(
+      "--include-content",
+      "include the full text of each config file in JSON output",
+      false,
+    )
     .action(async (options: InspectOptions) => {
       if (options.format !== "text" && options.format !== "json") {
         console.error(
@@ -61,7 +65,9 @@ export function registerInspectCommand(program: Command): void {
       }
 
       if (options.format === "json") {
-        console.log(renderJson(result));
+        console.log(
+          renderJson(result, { includeContent: options.includeContent }),
+        );
       } else {
         console.log(renderText(result));
       }

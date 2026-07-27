@@ -4,7 +4,10 @@ import { discoverConfigFiles } from "./discover.js";
 import { parseMarkdown } from "../parsers/markdown.js";
 import { estimateTokens } from "./tokenizer.js";
 import { normalizeInstruction } from "../utils/normalize.js";
-import { extractFileReferences } from "../utils/path.js";
+import {
+  extractExplicitReferences,
+  extractFileReferences,
+} from "../utils/path.js";
 import { duplicateInstructionRule } from "../rules/duplicate-instruction.js";
 import { brokenReferenceRule } from "../rules/broken-reference.js";
 import { missingScriptRule } from "../rules/missing-script.js";
@@ -12,6 +15,7 @@ import { packageManagerConflictRule } from "../rules/package-manager-conflict.js
 import { contextSizeRule } from "../rules/context-size.js";
 import { absolutePathRule } from "../rules/absolute-path.js";
 import { possibleSecretRule } from "../rules/possible-secret.js";
+import { KASANE_VERSION } from "../version.js";
 import type {
   AgentType,
   AnalysisContext,
@@ -23,8 +27,6 @@ import type {
   Severity,
   SourceType,
 } from "./types.js";
-
-const PACKAGE_VERSION = "0.1.0";
 
 const AGENTS_BY_SOURCE_TYPE: Record<SourceType, AgentType[]> = {
   agents: ["codex"],
@@ -49,27 +51,72 @@ function isMarkdownSource(sourceType: SourceType): boolean {
   return sourceType !== "mcp";
 }
 
+/**
+ * The directory a Cursor rule is anchored to: the parent of its `.cursor`
+ * directory, or the repository root for a root-level rule. Cursor applies a
+ * nested rule to the subtree that owns it, so `backend/.cursor/rules/x.mdc`
+ * is scoped to `backend/`.
+ */
+function cursorBaseDir(relativePath: string): string {
+  const marker = "/.cursor/";
+  const index = relativePath.indexOf(marker);
+  if (index >= 0) return relativePath.slice(0, index);
+  if (relativePath.startsWith(".cursor/")) return ".";
+  return path.posix.dirname(relativePath);
+}
+
+/**
+ * Cursor's `globs` frontmatter is written as a list, as a single string, or
+ * as a comma-separated string. Each pattern is kept as its own entry so
+ * extglob syntax such as `@(a|b)` is never split apart.
+ */
+function normalizeGlobs(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : [value];
+  const patterns: string[] = [];
+
+  for (const entry of raw) {
+    if (typeof entry !== "string") continue;
+    for (const part of entry.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed.length > 0) patterns.push(trimmed);
+    }
+  }
+
+  return patterns;
+}
+
+function scopeToBase(base: string): ContextInstruction["scope"] {
+  return base === "."
+    ? { type: "repository", patterns: ["."] }
+    : { type: "directory", patterns: [base] };
+}
+
 function computeScope(
   relativePath: string,
   sourceType: SourceType,
   frontmatter: Record<string, unknown>,
 ): ContextInstruction["scope"] {
   if (sourceType === "cursor") {
-    const globs = frontmatter.globs;
-    if (
-      Array.isArray(globs) &&
-      globs.length > 0 &&
-      globs.every((glob) => typeof glob === "string")
-    ) {
-      return { type: "glob", value: (globs as string[]).join("|") };
+    const base = cursorBaseDir(relativePath);
+    const globs = normalizeGlobs(frontmatter.globs);
+
+    if (globs.length > 0) {
+      // Cursor globs are written relative to the rule's own subtree.
+      const patterns =
+        base === "."
+          ? globs
+          : globs.map((glob) => `${base}/${glob.replace(/^\.?\//, "")}`);
+      return { type: "glob", patterns };
     }
+
+    // Without globs the rule is either always applied or agent-requested.
+    // Both reach the whole subtree that owns the rule; scoping them to the
+    // `.cursor/rules` directory instead would hide them from every target.
+    return scopeToBase(base);
   }
 
   const dir = path.posix.dirname(relativePath);
-  if (dir === ".") {
-    return { type: "repository", value: "." };
-  }
-  return { type: "directory", value: dir };
+  return scopeToBase(dir);
 }
 
 async function readPackageJsonScripts(root: string): Promise<string[] | null> {
@@ -86,11 +133,15 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
   const absoluteRoot = path.resolve(root);
   const discovered = await discoverConfigFiles(absoluteRoot);
 
+  const contents = await Promise.all(
+    discovered.map((file) => fs.readFile(file.filePath, "utf8")),
+  );
+
   const sources: ContextSource[] = [];
   const instructions: ContextInstruction[] = [];
 
-  for (const file of discovered) {
-    const content = await fs.readFile(file.filePath, "utf8");
+  discovered.forEach((file, fileIndex) => {
+    const content = contents[fileIndex];
     const estimatedTokens = estimateTokens(content);
     const agents = AGENTS_BY_SOURCE_TYPE[file.sourceType];
 
@@ -102,6 +153,16 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
         parsed.frontmatter,
       );
       parsed.instructions.forEach((instruction, index) => {
+        const references = Array.from(
+          new Set([
+            ...extractFileReferences(instruction.content),
+            ...extractExplicitReferences(
+              instruction.linkTargets,
+              instruction.codeSpans,
+            ),
+          ]),
+        );
+
         instructions.push({
           id: `${file.relativePath}#${index}`,
           source: {
@@ -115,7 +176,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
           content: instruction.content,
           normalizedContent: normalizeInstruction(instruction.content),
           estimatedTokens: estimateTokens(instruction.content),
-          references: extractFileReferences(instruction.content),
+          references,
         });
       });
     }
@@ -129,7 +190,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
       content,
       estimatedTokens,
     });
-  }
+  });
 
   const totalEstimatedTokens = sources.reduce(
     (sum, source) => sum + source.estimatedTokens,
@@ -169,7 +230,7 @@ export async function analyzeRepository(root: string): Promise<InspectResult> {
   }
 
   return {
-    version: PACKAGE_VERSION,
+    version: KASANE_VERSION,
     repository: context.repository,
     summary: {
       sourceCount: context.sources.length,

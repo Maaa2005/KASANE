@@ -103,11 +103,21 @@ export function extractPackageManagerCommands(text: string): DetectedCommand[] {
 const MANAGER_MENTION_PATTERN = /\b(npm|pnpm|yarn|bun)\b/g;
 
 /**
- * Extracts package manager names mentioned anywhere in the text.
- * Used by KASANE004.
+ * A manager named as the thing *not* to use. "Use pnpm instead of npm" and
+ * "Do not use npm" both name npm, but neither instructs an agent to run it,
+ * and counting them makes KASANE004 contradict the very line that resolves
+ * the ambiguity.
+ */
+const NEGATED_MANAGER_PATTERN =
+  /\b(?:do\s+not\s+use|does\s+not\s+use|don'?t\s+use|never\s+use|stop\s+using|avoid(?:\s+using)?|instead\s+of|rather\s+than|not|no)\s+(?:the\s+)?(?:npm|pnpm|yarn|bun)\b/gi;
+
+/**
+ * Extracts package manager names the text tells an agent to use, ignoring
+ * ones it explicitly tells the agent not to use. Used by KASANE004.
  */
 export function extractMentionedManagers(text: string): PackageManager[] {
-  const matches = text.match(MANAGER_MENTION_PATTERN) ?? [];
+  const positive = text.replace(NEGATED_MANAGER_PATTERN, " ");
+  const matches = positive.match(MANAGER_MENTION_PATTERN) ?? [];
   return Array.from(new Set(matches)) as PackageManager[];
 }
 

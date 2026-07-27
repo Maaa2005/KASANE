@@ -1,4 +1,5 @@
 import type { AgentType, DiffResult } from "../core/types.js";
+import { redactSecrets } from "../utils/secrets.js";
 
 const AGENT_LABELS: Record<AgentType, string> = {
   codex: "Codex",
@@ -33,6 +34,15 @@ export function renderDiffText(diff: DiffResult): string {
     lines.push("");
   }
 
+  if (diff.sharedBy.length > 0) {
+    lines.push("Shared by some agents:");
+    for (const shared of diff.sharedBy) {
+      const labels = shared.agents.map((agent) => AGENT_LABELS[agent]);
+      lines.push(`  [${labels.join(", ")}] ${shared.instruction.content}`);
+    }
+    lines.push("");
+  }
+
   lines.push("Common:");
   if (diff.common.length === 0) {
     lines.push("  (none)");
@@ -57,5 +67,5 @@ export function renderDiffText(diff: DiffResult): string {
     lines.push("");
   }
 
-  return lines.join("\n").trimEnd();
+  return redactSecrets(lines.join("\n").trimEnd());
 }

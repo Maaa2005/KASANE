@@ -1,0 +1,6 @@
+---
+globs:
+  - "**/*.py"
+---
+
+Backend rule.

@@ -2,13 +2,14 @@ import { Command } from "commander";
 import { registerInspectCommand } from "./commands/inspect.js";
 import { registerExplainCommand } from "./commands/explain.js";
 import { registerDiffCommand } from "./commands/diff.js";
+import { KASANE_VERSION } from "../version.js";
 
 const program = new Command();
 
 program
   .name("kasane")
   .description("Lint, explain, and compare context for AI coding agents.")
-  .version("0.1.0");
+  .version(KASANE_VERSION);
 
 registerInspectCommand(program);
 registerExplainCommand(program);

@@ -5,6 +5,7 @@ import type {
   Diagnostic,
   DiffConflict,
   DiffResult,
+  SharedInstruction,
 } from "./types.js";
 import { resolveEffectiveContext } from "./resolver.js";
 import { extractMentionedManagers } from "../utils/commands.js";
@@ -44,8 +45,12 @@ export function computeDiff(
   diagnostics: Diagnostic[],
   options: DiffOptions,
 ): DiffResult {
+  // Duplicate agents in --agents would otherwise make an instruction look
+  // "shared" with itself and skew every membership count below.
+  const agents = Array.from(new Set(options.agents));
+
   const perAgent: Record<string, ReturnType<typeof resolveEffectiveContext>> = {};
-  for (const agent of options.agents) {
+  for (const agent of agents) {
     perAgent[agent] = resolveEffectiveContext(context, diagnostics, {
       agent,
       targetPath: options.targetPath,
@@ -53,42 +58,50 @@ export function computeDiff(
   }
 
   const instructionsByAgent: Record<string, ContextInstruction[]> = {};
-  for (const agent of options.agents) {
+  for (const agent of agents) {
     instructionsByAgent[agent] = perAgent[agent].instructions;
   }
 
-  const normalizedSetByAgent: Record<string, Set<string>> = {};
-  for (const agent of options.agents) {
-    normalizedSetByAgent[agent] = new Set(
-      instructionsByAgent[agent].map((instruction) => instruction.normalizedContent),
-    );
+  // Group by normalized text and record which agents receive it. Deciding
+  // membership per instruction instead of per agent is what keeps a
+  // three-way comparison from dropping text that two of the three share.
+  const groups = new Map<
+    string,
+    { instruction: ContextInstruction; agents: AgentType[] }
+  >();
+
+  for (const agent of agents) {
+    for (const instruction of instructionsByAgent[agent]) {
+      const existing = groups.get(instruction.normalizedContent);
+      if (existing === undefined) {
+        groups.set(instruction.normalizedContent, {
+          instruction,
+          agents: [agent],
+        });
+      } else if (!existing.agents.includes(agent)) {
+        existing.agents.push(agent);
+      }
+    }
   }
 
   const common: ContextInstruction[] = [];
-  const seenCommon = new Set<string>();
+  const sharedBy: SharedInstruction[] = [];
   const onlyIn: Record<string, ContextInstruction[]> = {};
-
-  for (const agent of options.agents) {
+  for (const agent of agents) {
     onlyIn[agent] = [];
-    for (const instruction of instructionsByAgent[agent]) {
-      const presentInAll = options.agents.every((other) =>
-        normalizedSetByAgent[other].has(instruction.normalizedContent),
-      );
-      if (presentInAll) {
-        if (!seenCommon.has(instruction.normalizedContent)) {
-          seenCommon.add(instruction.normalizedContent);
-          common.push(instruction);
-        }
-      } else {
-        const presentElsewhere = options.agents.some(
-          (other) =>
-            other !== agent &&
-            normalizedSetByAgent[other].has(instruction.normalizedContent),
-        );
-        if (!presentElsewhere) {
-          onlyIn[agent].push(instruction);
-        }
-      }
+  }
+
+  for (const group of groups.values()) {
+    if (group.agents.length === agents.length) {
+      common.push(group.instruction);
+    } else if (group.agents.length === 1) {
+      onlyIn[group.agents[0]].push(group.instruction);
+    } else {
+      sharedBy.push({
+        // Report in the order the caller listed the agents, not discovery order.
+        agents: agents.filter((agent) => group.agents.includes(agent)),
+        instruction: group.instruction,
+      });
     }
   }
 
@@ -99,11 +112,12 @@ export function computeDiff(
   }
 
   return {
-    targetPath: perAgent[options.agents[0]]?.targetPath,
-    agents: options.agents,
+    targetPath: perAgent[agents[0]]?.targetPath,
+    agents,
     perAgent,
     onlyIn,
     common,
+    sharedBy,
     conflicts,
   };
 }

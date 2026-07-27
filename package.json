@@ -1,6 +1,6 @@
 {
   "name": "kasane",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lint, explain, and compare context for AI coding agents.",
   "type": "module",
   "license": "MIT",
@@ -43,7 +43,7 @@
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {

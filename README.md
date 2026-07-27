@@ -92,7 +92,12 @@ kasane diff --agents <agent,agent,...> [--path <file>]
 | `diff`    | Compare the effective context between two or more agents                 |
 
 Common options: `--root <path>` (repository to analyze, default `.`),
-`--format text|json`, `--verbose`.
+`--format text|json`, `--include-content`.
+
+JSON output omits the full text of each config file by default, so a
+secret sitting in a context file is not copied into CI logs alongside the
+diagnostic that reports it. Pass `--include-content` when you want the
+file bodies; secret-looking strings stay masked either way.
 `inspect` also supports `--fail-on warning|error` for CI gating.
 `explain`/`diff` also support `--path <file>` to scope the result to a
 single target file (directory-scoped and Cursor `globs`-scoped instructions
@@ -109,15 +114,25 @@ are resolved accordingly).
 | GitHub Copilot | `.github/copilot-instructions.md`                                    |
 | MCP servers    | `.mcp.json`, `mcp.json`, `.cursor/mcp.json`, `.claude/mcp.json` (detected only, not parsed for instructions) |
 
-### Known limitations (not reproduced in v0.1.0)
+Cursor rules are resolved from a `.cursor/rules` directory at any depth,
+and `globs` is accepted as a list, a single string, or a comma-separated
+string. A rule with no `globs` is scoped to the subtree that owns it.
+
+### Known limitations (not reproduced in v0.2.0)
 
 KASANE only reconstructs context that can be resolved by **static
 analysis**. The following are intentionally out of scope for now:
 
-- Rules an agent applies dynamically at runtime based on a description
-  (e.g. Cursor's Agent-Requested rules with `alwaysApply: false`)
+- Whether an agent actually loads a description-matched rule at runtime
+  (an Agent-Requested rule is reported as reaching its whole subtree,
+  which is an upper bound, not a prediction)
 - In-agent-only reference syntax, such as Claude Code's `@path` imports
 - Behavior differences caused by agent version or platform
+- `.gitignore` files below the repository root — only the root one is
+  applied when filtering discovered files
+- Workspace-local `package.json` scripts: KASANE003 checks every
+  instruction against the **root** `package.json`, so a command that is
+  valid inside a workspace package is reported as missing
 
 ## It's local, static analysis only
 
@@ -167,8 +182,8 @@ to run them once the repository and npm package are ready:
 4. Update [1.4 競合との違い](./計画書.md) / the "Why KASANE" section with a
    concrete competitor comparison
 5. `npm login`, then `npm publish` (or tag-push to trigger
-   `.github/workflows/publish.yml`) for the first `v0.1.0` release
-6. Create a GitHub Release / tag `v0.1.0`
+   `.github/workflows/publish.yml`) for the `v0.2.0` release
+6. Create a GitHub Release / tag `v0.2.0`
 7. Post the initial announcement per the launch plan (計画書.md §26)
 
 ## Changelog

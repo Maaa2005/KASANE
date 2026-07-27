@@ -9,10 +9,13 @@ const CONFIG_PATTERNS: Array<{ pattern: string; sourceType: SourceType }> = [
   { pattern: "**/CLAUDE.md", sourceType: "claude" },
   { pattern: "**/CLAUDE.local.md", sourceType: "claude" },
   { pattern: "**/GEMINI.md", sourceType: "gemini" },
-  { pattern: ".github/copilot-instructions.md", sourceType: "copilot" },
-  { pattern: ".cursor/rules/**/*.md", sourceType: "cursor" },
-  { pattern: ".cursor/rules/**/*.mdc", sourceType: "cursor" },
-  { pattern: ".cursorrules", sourceType: "cursor" },
+  { pattern: "**/.github/copilot-instructions.md", sourceType: "copilot" },
+  // Cursor resolves rules from a `.cursor/rules` directory at any depth,
+  // not only at the repository root — `backend/.cursor/rules/*.mdc` applies
+  // to files under `backend/`.
+  { pattern: "**/.cursor/rules/**/*.md", sourceType: "cursor" },
+  { pattern: "**/.cursor/rules/**/*.mdc", sourceType: "cursor" },
+  { pattern: "**/.cursorrules", sourceType: "cursor" },
 ];
 
 const MCP_PATTERNS = [
@@ -48,7 +51,10 @@ export async function discoverConfigFiles(
   const results: DiscoveredFile[] = [];
   const seen = new Set<string>();
 
-  for (const { pattern, sourceType } of CONFIG_PATTERNS) {
+  const collect = async (
+    pattern: string,
+    sourceType: SourceType,
+  ): Promise<void> => {
     const matches = await fg(pattern, {
       cwd: absoluteRoot,
       ignore: ALWAYS_IGNORED,
@@ -68,29 +74,19 @@ export async function discoverConfigFiles(
         sourceType,
       });
     }
+  };
+
+  for (const { pattern, sourceType } of CONFIG_PATTERNS) {
+    await collect(pattern, sourceType);
   }
 
   for (const pattern of MCP_PATTERNS) {
-    const matches = await fg(pattern, {
-      cwd: absoluteRoot,
-      ignore: ALWAYS_IGNORED,
-      dot: true,
-      onlyFiles: true,
-      followSymbolicLinks: false,
-      absolute: false,
-    });
-
-    for (const relativePath of matches) {
-      if (ig.ignores(relativePath)) continue;
-      if (seen.has(relativePath)) continue;
-      seen.add(relativePath);
-      results.push({
-        filePath: path.join(absoluteRoot, relativePath),
-        relativePath,
-        sourceType: "mcp",
-      });
-    }
+    await collect(pattern, "mcp");
   }
+
+  // Glob order is filesystem-dependent, which would make `--format json`
+  // output differ between machines for an identical repository.
+  results.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 
   return results;
 }

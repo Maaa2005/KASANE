@@ -23,6 +23,18 @@ describe("analyzeRepository diagnostics", () => {
     expect(result.diagnostics.some((d) => d.ruleId === "KASANE002")).toBe(true);
   });
 
+  it("detects a broken reference written as a Markdown link (KASANE002)", async () => {
+    const result = await analyzeRepository(
+      path.join(fixturesDir, "markdown-refs"),
+    );
+
+    const broken = result.diagnostics.filter((d) => d.ruleId === "KASANE002");
+
+    expect(broken.map((d) => d.metadata?.reference)).toEqual([
+      "docs/missing-guide.md",
+    ]);
+  });
+
   it("detects a package manager mismatch against the lockfile (KASANE004)", async () => {
     const result = await analyzeRepository(
       path.join(fixturesDir, "mixed-package-manager"),

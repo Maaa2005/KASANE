@@ -19,7 +19,7 @@ interface ExplainOptions {
   path?: string;
   format: "text" | "json";
   showContent?: boolean;
-  verbose?: boolean;
+  includeContent?: boolean;
 }
 
 export function registerExplainCommand(program: Command): void {
@@ -34,7 +34,11 @@ export function registerExplainCommand(program: Command): void {
     .option("--root <path>", "repository root to analyze", ".")
     .option("--format <format>", "output format: text or json", "text")
     .option("--show-content", "print the full content of applicable instructions", false)
-    .option("--verbose", "show additional detail", false)
+    .option(
+      "--include-content",
+      "include the full text of each config file in JSON output",
+      false,
+    )
     .action(async (options: ExplainOptions) => {
       if (options.agent === undefined) {
         console.error(
@@ -77,7 +81,9 @@ export function registerExplainCommand(program: Command): void {
       }
 
       if (options.format === "json") {
-        console.log(renderJson(effective));
+        console.log(
+          renderJson(effective, { includeContent: options.includeContent }),
+        );
       } else {
         console.log(
           renderExplainText(effective, { showContent: options.showContent }),

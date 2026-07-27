@@ -7,6 +7,26 @@ import { computeDiff } from "../../src/core/differ.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = path.join(__dirname, "..", "fixtures", "diff-repo");
 
+describe("computeDiff with three agents", () => {
+  it("reports text two of three agents share instead of dropping it", async () => {
+    const context = await buildAnalysisContext(fixtureRoot);
+    const diagnostics = await runDiagnostics(context);
+
+    const diff = computeDiff(context, diagnostics, {
+      agents: ["codex", "claude", "gemini"],
+    });
+
+    const shared = diff.sharedBy.find((entry) =>
+      entry.instruction.content.startsWith("Write tests"),
+    );
+
+    expect(shared).toBeDefined();
+    expect(shared?.agents).toEqual(["codex", "claude"]);
+    expect(diff.common).toEqual([]);
+    expect(diff.onlyIn.gemini).toEqual([]);
+  });
+});
+
 describe("computeDiff (diff-repo fixture)", () => {
   it("finds the shared instruction as common", async () => {
     const context = await buildAnalysisContext(fixtureRoot);

@@ -1,4 +1,5 @@
 import type { InspectResult } from "../core/types.js";
+import { redactSecrets } from "../utils/secrets.js";
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
   agents: "AGENTS.md",
@@ -57,5 +58,5 @@ export function renderText(result: InspectResult): string {
     }
   }
 
-  return lines.join("\n");
+  return redactSecrets(lines.join("\n"));
 }

@@ -18,7 +18,7 @@ interface DiffOptions {
   root: string;
   path?: string;
   format: "text" | "json";
-  verbose?: boolean;
+  includeContent?: boolean;
 }
 
 export function registerDiffCommand(program: Command): void {
@@ -32,7 +32,11 @@ export function registerDiffCommand(program: Command): void {
     .option("--path <path>", "limit the comparison to a specific file")
     .option("--root <path>", "repository root to analyze", ".")
     .option("--format <format>", "output format: text or json", "text")
-    .option("--verbose", "show additional detail", false)
+    .option(
+      "--include-content",
+      "include the full text of each config file in JSON output",
+      false,
+    )
     .action(async (options: DiffOptions) => {
       if (options.agents === undefined) {
         console.error(
@@ -85,7 +89,9 @@ export function registerDiffCommand(program: Command): void {
       }
 
       if (options.format === "json") {
-        console.log(renderJson(diff));
+        console.log(
+          renderJson(diff, { includeContent: options.includeContent }),
+        );
       } else {
         console.log(renderDiffText(diff));
       }

@@ -12,17 +12,28 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          # Provenance requires a recent npm; Node 22 ships one.
+          node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+
+      - name: Verify tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $pkg" >&2
+            exit 1
+          fi
+          echo "Publishing $pkg from tag $GITHUB_REF_NAME"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -40,6 +51,6 @@ jobs:
         run: pnpm build
 
       - name: Publish to npm
-        run: pnpm publish --no-git-checks --access public
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

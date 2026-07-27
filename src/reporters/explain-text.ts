@@ -1,4 +1,5 @@
 import type { AgentType, EffectiveContext } from "../core/types.js";
+import { redactSecrets } from "../utils/secrets.js";
 
 const AGENT_LABELS: Record<AgentType, string> = {
   codex: "Codex",
@@ -83,5 +84,5 @@ export function renderExplainText(
     lines.push("");
   }
 
-  return lines.join("\n").trimEnd();
+  return redactSecrets(lines.join("\n").trimEnd());
 }

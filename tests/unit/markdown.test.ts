@@ -1,6 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { parseMarkdown } from "../../src/parsers/markdown.js";
 
+describe("parseMarkdown nested lists and links", () => {
+  it("does not fold a child list item's text into its parent", () => {
+    const result = parseMarkdown("- Parent item\n  - Child item");
+
+    expect(result.instructions.map((i) => i.content)).toEqual([
+      "Parent item",
+      "Child item",
+    ]);
+  });
+
+  it("collects Markdown link targets", () => {
+    const result = parseMarkdown("See [the guide](docs/guide.md) first.");
+
+    expect(result.instructions[0].linkTargets).toEqual(["docs/guide.md"]);
+  });
+
+  it("collects inline code spans", () => {
+    const result = parseMarkdown("Run `node dist/index.js` to check.");
+
+    expect(result.instructions[0].codeSpans).toEqual(["node dist/index.js"]);
+  });
+});
+
 describe("parseMarkdown", () => {
   it("counts paragraphs as instructions", () => {
     const result = parseMarkdown("First paragraph.\n\nSecond paragraph.");
