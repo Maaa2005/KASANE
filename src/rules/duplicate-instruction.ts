@@ -1,3 +1,4 @@
+import { aliasSourcePaths } from "../core/aliases.js";
 import type { AnalysisContext, Diagnostic, DiagnosticRule } from "../core/types.js";
 
 export const duplicateInstructionRule: DiagnosticRule = {
@@ -5,9 +6,12 @@ export const duplicateInstructionRule: DiagnosticRule = {
 
   async run(context: AnalysisContext): Promise<Diagnostic[]> {
     const groups = new Map<string, typeof context.instructions>();
+    // A symlink and its target are one file, not a duplicate.
+    const aliases = aliasSourcePaths(context.sources);
 
     for (const instruction of context.instructions) {
       if (instruction.normalizedContent.length === 0) continue;
+      if (aliases.has(instruction.source.relativePath)) continue;
       const group = groups.get(instruction.normalizedContent) ?? [];
       group.push(instruction);
       groups.set(instruction.normalizedContent, group);

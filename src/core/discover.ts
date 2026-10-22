@@ -31,21 +31,65 @@ export interface DiscoveredFile {
   filePath: string;
   relativePath: string;
   sourceType: SourceType;
+  /**
+   * Set when `relativePath` is a symlink: the repository-relative path of the
+   * file it resolves to. `ln -s AGENTS.md CLAUDE.md` is a common way to share
+   * one file between agents.
+   */
+  linkTarget?: string;
+}
+
+/**
+ * Returns the real path of `relativePath` when it resolves, through any
+ * symlinks, to a regular file inside `root`; otherwise null. Anything that
+ * points outside the repository — `/etc/passwd`, `~/.ssh/…`, `/dev/zero` — is
+ * never read, so analyzing an untrusted checkout cannot print or hang on it.
+ */
+export function resolveFileInside(
+  root: string,
+  relativePath: string,
+): string | null {
+  try {
+    const realRoot = fs.realpathSync(root);
+    const real = fs.realpathSync(path.join(root, relativePath));
+    const fromRoot = path.relative(realRoot, real);
+    if (
+      fromRoot === "" ||
+      fromRoot === ".." ||
+      fromRoot.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(fromRoot)
+    ) {
+      return null;
+    }
+    return fs.statSync(real).isFile() ? real : null;
+  } catch {
+    return null;
+  }
+}
+
+function readIgnoreFile(root: string, relativePath: string): string {
+  const real = resolveFileInside(root, relativePath);
+  return real ? fs.readFileSync(real, "utf8") : "";
 }
 
 function loadGitignore(root: string): ReturnType<typeof ignore> {
   const ig = ignore();
-  const gitignorePath = path.join(root, ".gitignore");
-  if (fs.existsSync(gitignorePath)) {
-    ig.add(fs.readFileSync(gitignorePath, "utf8"));
-  }
+  ig.add(readIgnoreFile(root, ".gitignore"));
   // `.git/info/exclude` is honored by git but never committed, so it is the
   // only place some users keep local-only agent files.
-  const excludePath = path.join(root, ".git", "info", "exclude");
-  if (fs.existsSync(excludePath)) {
-    ig.add(fs.readFileSync(excludePath, "utf8"));
-  }
+  ig.add(readIgnoreFile(root, path.join(".git", "info", "exclude")));
   return ig;
+}
+
+// `CLAUDE.local.md` is meant to be gitignored, and Claude Code loads it
+// anyway, so ignoring it would hide context the agent actually sees. It is
+// still skipped when the directory holding it is ignored.
+function isIgnored(ig: ReturnType<typeof ignore>, relativePath: string): boolean {
+  if (path.posix.basename(relativePath) !== "CLAUDE.local.md") {
+    return ig.ignores(relativePath);
+  }
+  const dir = path.posix.dirname(relativePath);
+  return dir !== "." && ig.ignores(`${dir}/`);
 }
 
 // Nested checkouts (worktrees, submodules, vendored repos) are separate
@@ -83,6 +127,7 @@ export async function discoverConfigFiles(
   const absoluteRoot = path.resolve(root);
   const ig = loadGitignore(absoluteRoot);
   const insideNestedRepo = createNestedRepoCheck(absoluteRoot);
+  const realRoot = fs.realpathSync(absoluteRoot);
 
   const results: DiscoveredFile[] = [];
   const seen = new Set<string>();
@@ -95,20 +140,26 @@ export async function discoverConfigFiles(
       cwd: absoluteRoot,
       ignore: ALWAYS_IGNORED,
       dot: true,
-      onlyFiles: true,
+      // fast-glob drops symlinks under `onlyFiles`; each match is checked
+      // with `resolveFileInside` instead.
+      onlyFiles: false,
       followSymbolicLinks: false,
       absolute: false,
     });
 
     for (const relativePath of matches) {
-      if (ig.ignores(relativePath)) continue;
+      if (isIgnored(ig, relativePath)) continue;
       if (insideNestedRepo(relativePath)) continue;
       if (seen.has(relativePath)) continue;
+      const real = resolveFileInside(absoluteRoot, relativePath);
+      if (!real) continue;
       seen.add(relativePath);
+      const target = path.relative(realRoot, real).split(path.sep).join("/");
       results.push({
         filePath: path.join(absoluteRoot, relativePath),
         relativePath,
         sourceType,
+        ...(target !== relativePath ? { linkTarget: target } : {}),
       });
     }
   };

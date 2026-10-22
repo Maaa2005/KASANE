@@ -36,7 +36,15 @@ export function renderJson(
   options: RenderJsonOptions = {},
 ): string {
   const payload = options.includeContent ? result : stripSourceContent(result);
-  // Redaction runs last so no field — including one added later — can
-  // route an unmasked secret to stdout.
-  return redactSecrets(JSON.stringify(payload, null, 2));
+  // Every string is redacted before serialization, so no field — including
+  // one added later — can route an unmasked secret to stdout, and JSON
+  // escapes such as `\t` cannot hide a key from the patterns. The final
+  // pass covers object keys, which a replacer cannot rewrite.
+  const serialized = JSON.stringify(
+    payload,
+    (_key, value: unknown) =>
+      typeof value === "string" ? redactSecrets(value) : value,
+    2,
+  );
+  return redactSecrets(serialized);
 }

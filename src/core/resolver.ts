@@ -1,5 +1,6 @@
 import path from "node:path";
 import { minimatch } from "minimatch";
+import { realPathOf } from "./aliases.js";
 import type {
   AgentType,
   AnalysisContext,
@@ -61,10 +62,25 @@ export function resolveEffectiveContext(
     0,
   );
 
+  // Findings are reported once per file, so a symlinked source is matched
+  // through the file it points to, and a duplicate is relevant when any of
+  // its copies is in this agent's context.
+  const realPaths = new Map(
+    context.sources.map((source) => [source.relativePath, realPathOf(source)]),
+  );
+  const includedRealPaths = new Set(
+    sources.map((source) => realPathOf(source)),
+  );
+  const isIncluded = (relativePath: string): boolean =>
+    includedRealPaths.has(realPaths.get(relativePath) ?? relativePath);
+
   const scopedDiagnostics = diagnostics.filter(
     (diagnostic) =>
       diagnostic.source === undefined ||
-      includedPaths.has(diagnostic.source.relativePath),
+      isIncluded(diagnostic.source.relativePath) ||
+      (diagnostic.relatedSources ?? []).some((related) =>
+        isIncluded(related.relativePath),
+      ),
   );
 
   return {

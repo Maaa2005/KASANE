@@ -49,9 +49,9 @@
   "dependencies": {
     "commander": "^12.1.0",
     "fast-glob": "^3.3.2",
-    "gray-matter": "^4.0.3",
     "ignore": "^5.3.1",
     "js-tiktoken": "^1.0.15",
+    "js-yaml": "^4.3.0",
     "minimatch": "^10.2.5",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.14.0",
     "eslint": "^9.9.0",
     "prettier": "^3.3.3",

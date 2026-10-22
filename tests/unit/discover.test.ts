@@ -54,8 +54,8 @@ describe("discoverConfigFiles nested checkouts", () => {
 
   it("honors .git/info/exclude", async () => {
     write("AGENTS.md");
-    write("CLAUDE.local.md");
-    write(".git/info/exclude", "CLAUDE.local.md\n");
+    write("scratch/AGENTS.md");
+    write(".git/info/exclude", "scratch/\n");
 
     expect(await discovered()).toEqual(["AGENTS.md"]);
   });

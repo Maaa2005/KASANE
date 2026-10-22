@@ -1,6 +1,6 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
-import matter from "gray-matter";
+import { splitFrontmatter } from "./frontmatter.js";
 
 export interface MarkdownInstruction {
   content: string;
@@ -76,15 +76,8 @@ function collectInline(node: MdNode, acc: Inline): void {
   }
 }
 
-function countLeadingLines(prefix: string): number {
-  return (prefix.match(/\n/g) ?? []).length;
-}
-
 export function parseMarkdown(content: string): ParsedMarkdown {
-  const { data, content: body } = matter(content);
-  const lineOffset = countLeadingLines(
-    content.slice(0, content.length - body.length),
-  );
+  const { data, body, lineOffset } = splitFrontmatter(content);
 
   const tree = unified().use(remarkParse).parse(body) as unknown as MdNode;
   const instructions: MarkdownInstruction[] = [];

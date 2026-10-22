@@ -1,9 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { discoverConfigFiles } from "./discover.js";
+import { discoverConfigFiles, resolveFileInside } from "./discover.js";
+import { aliasSourcePaths } from "./aliases.js";
 import { parseMarkdown } from "../parsers/markdown.js";
 import { estimateTokens } from "./tokenizer.js";
 import { normalizeInstruction } from "../utils/normalize.js";
+import { redactSecrets } from "../utils/secrets.js";
 import {
   extractExplicitReferences,
   extractFileReferences,
@@ -119,11 +121,30 @@ function computeScope(
   return scopeToBase(dir);
 }
 
-async function readPackageJsonScripts(root: string): Promise<string[] | null> {
+interface PackageJsonInfo {
+  scripts: string[];
+  dependencies: string[];
+}
+
+async function readPackageJson(root: string): Promise<PackageJsonInfo | null> {
   try {
-    const raw = await fs.readFile(path.join(root, "package.json"), "utf8");
-    const parsed = JSON.parse(raw) as { scripts?: Record<string, string> };
-    return Object.keys(parsed.scripts ?? {});
+    // Same guard as discovery: a symlink out of the repository, or to a
+    // device, is not this repository's package.json.
+    const file = resolveFileInside(root, "package.json");
+    if (!file) return null;
+    const raw = await fs.readFile(file, "utf8");
+    const parsed = JSON.parse(raw) as {
+      scripts?: Record<string, string>;
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    return {
+      scripts: Object.keys(parsed.scripts ?? {}),
+      dependencies: [
+        ...Object.keys(parsed.dependencies ?? {}),
+        ...Object.keys(parsed.devDependencies ?? {}),
+      ],
+    };
   } catch {
     return null;
   }
@@ -174,7 +195,11 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
           agents,
           scope,
           content: instruction.content,
-          normalizedContent: normalizeInstruction(instruction.content),
+          // Normalizing lowercases and strips `_`, which turns `AKIA…` and
+          // `ghp_…` into text no secret pattern recognizes. Mask first.
+          normalizedContent: normalizeInstruction(
+            redactSecrets(instruction.content),
+          ),
           estimatedTokens: estimateTokens(instruction.content),
           references,
         });
@@ -189,20 +214,26 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
       agents,
       content,
       estimatedTokens,
+      ...(file.linkTarget ? { linkTarget: file.linkTarget } : {}),
     });
   });
 
+  const aliases = aliasSourcePaths(sources);
   const totalEstimatedTokens = sources.reduce(
-    (sum, source) => sum + source.estimatedTokens,
+    (sum, source) =>
+      aliases.has(source.relativePath) ? sum : sum + source.estimatedTokens,
     0,
   );
+
+  const packageJson = await readPackageJson(absoluteRoot);
 
   return {
     repository: absoluteRoot,
     sources,
     instructions,
     totalEstimatedTokens,
-    packageJsonScripts: await readPackageJsonScripts(absoluteRoot),
+    packageJsonScripts: packageJson?.scripts ?? null,
+    packageJsonDependencies: packageJson?.dependencies ?? [],
   };
 }
 
@@ -213,7 +244,14 @@ export async function runDiagnostics(
   for (const rule of RULES) {
     diagnostics.push(...(await rule.run(context)));
   }
-  return diagnostics;
+  // A symlinked config file would repeat every finding of the file it points
+  // to; those are reported once, against the file itself.
+  const aliases = aliasSourcePaths(context.sources);
+  return diagnostics.filter(
+    (diagnostic) =>
+      diagnostic.source === undefined ||
+      !aliases.has(diagnostic.source.relativePath),
+  );
 }
 
 export async function analyzeRepository(root: string): Promise<InspectResult> {

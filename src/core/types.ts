@@ -16,6 +16,8 @@ export interface ContextSource {
   agents: AgentType[];
   content: string;
   estimatedTokens: number;
+  /** Repository-relative path of the file this symlink resolves to. */
+  linkTarget?: string;
 }
 
 export type Severity = "info" | "warning" | "error";
@@ -87,6 +89,8 @@ export interface AnalysisContext {
   instructions: ContextInstruction[];
   totalEstimatedTokens: number;
   packageJsonScripts: string[] | null;
+  /** Names from dependencies and devDependencies of the root package.json. */
+  packageJsonDependencies?: string[];
 }
 
 export interface DiagnosticRule {

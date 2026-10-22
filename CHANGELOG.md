@@ -8,6 +8,25 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ## [Unreleased]
 
+### Security
+
+- Frontmatter is parsed with a safe YAML loader. The previous parser
+  evaluated `---js` frontmatter as JavaScript, so running `kasane` on an
+  untrusted checkout could execute code from a config file.
+- Secret masking could be bypassed. A key followed by a tab or another
+  character that JSON escapes was printed unmasked in `--format json`, and
+  the lowercased text used for duplicate detection (`normalizedContent`)
+  carried keys no pattern recognized. Masking now runs on every string
+  before serialization and before normalization.
+- `.gitignore`, `.git/info/exclude`, `package.json` and config files are
+  only read when they resolve to a regular file inside the repository. A
+  symlink to a file outside it, or to a device such as `/dev/zero`, could
+  print that file's contents or hang the analysis.
+- Token counting stalled for minutes on long runs of text without spaces
+  and crashed on special-token markers such as `<|endoftext|>`. Long runs
+  are now counted in slices, very large files are extrapolated from a
+  sample, and markers are counted as ordinary text.
+
 ### Fixed
 
 - Nested git checkouts were analyzed as part of the parent repository.
@@ -24,6 +43,19 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   which now also covers `/root/...`.
 - KASANE002 reported template paths such as `notes/YYYY-MM-DD-topic.md`
   or `docs/ADR-XXXX.md` as broken references.
+- KASANE007 flagged hyphenated words (`flask-sqlalchemy`, `sk-learn`)
+  and prose or placeholder bearer tokens (`Bearer YOUR_API_KEY`). It now
+  also detects GitHub OAuth/app tokens, GitLab, AWS session, Google API,
+  Slack, Stripe, npm and Hugging Face tokens, and private key blocks.
+- A config file symlinked to another (`ln -s AGENTS.md CLAUDE.md`) was
+  reported as a duplicate of it and its tokens were counted twice.
+  Symlinked config files are now discovered and analyzed once.
+- `CLAUDE.local.md` was skipped when gitignored, although that is how it
+  is meant to be used and Claude Code still loads it.
+- Malformed frontmatter aborted parsing, and a file starting with a `---`
+  horizontal rule lost the text up to the next `---`.
+- `explain` dropped a duplicate-instruction diagnostic when only the other
+  copy was in the agent's context.
 
 ## [0.2.0] - 2026-07-28
 
