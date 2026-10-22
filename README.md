@@ -205,9 +205,9 @@ analysis**. The following are intentionally out of scope for now:
   `.git/info/exclude` are applied when filtering discovered files.
   Directories with their own `.git` (worktrees, submodules) are skipped
   as separate repositories
-- Workspace-local `package.json` scripts: KASANE003 checks every
-  instruction against the **root** `package.json`, so a command that is
-  valid inside a workspace package is reported as missing
+- Which package manager a workspace package uses: KASANE004 reads only
+  the root lockfile and the root `package.json` `packageManager` field.
+  (KASANE003 does check a package's own `package.json` scripts.)
 
 ## It's local, static analysis only
 

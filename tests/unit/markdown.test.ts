@@ -24,6 +24,31 @@ describe("parseMarkdown nested lists and links", () => {
   });
 });
 
+describe("parseMarkdown instruction text", () => {
+  it("does not add spaces around inline code, emphasis or links", () => {
+    const result = parseMarkdown(
+      "- Do not use `npm`; use **pnpm**.\n- See [the guide](docs/guide.md), then *run* it.",
+    );
+
+    expect(result.instructions.map((i) => i.content)).toEqual([
+      "Do not use `npm`; use pnpm.",
+      "See the guide, then run it.",
+    ]);
+  });
+
+  it("keeps a word split by emphasis as one word", () => {
+    const result = parseMarkdown("Run **pnpm**`test`, never un*safe* scripts.");
+
+    expect(result.instructions[0].content).toBe("Run pnpm`test`, never unsafe scripts.");
+  });
+
+  it("separates lines joined by a hard break and a list item's paragraphs", () => {
+    const result = parseMarkdown("- First line  \n  second line\n\n  Second paragraph.\n");
+
+    expect(result.instructions[0].content).toBe("First line second line Second paragraph.");
+  });
+});
+
 describe("parseMarkdown", () => {
   it("counts paragraphs as instructions", () => {
     const result = parseMarkdown("First paragraph.\n\nSecond paragraph.");

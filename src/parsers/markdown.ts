@@ -45,15 +45,34 @@ function ownChildren(node: MdNode): MdNode[] {
     : children;
 }
 
+/** Nodes whose children are inline text, which already carries its spaces. */
+const INLINE_PARENTS = new Set([
+  "paragraph",
+  "heading",
+  "emphasis",
+  "strong",
+  "delete",
+  "link",
+  "linkReference",
+  "tableCell",
+]);
+
 function collectText(node: MdNode): string {
   if (typeof node.value === "string") {
     return node.type === "inlineCode" ? `\`${node.value}\`` : node.value;
+  }
+  if (node.type === "break") {
+    return " ";
   }
   const children = ownChildren(node);
   if (children.length === 0) {
     return "";
   }
-  return children.map(collectText).join(" ").replace(/\s+/g, " ").trim();
+  // Joining inline nodes with a space would turn "`npm`;" into "`npm` ;"
+  // and "**a**b" into "a b"; blocks such as a list item's paragraphs do
+  // need one between them.
+  const separator = INLINE_PARENTS.has(node.type) ? "" : " ";
+  return children.map(collectText).join(separator).replace(/\s+/g, " ").trim();
 }
 
 interface Inline {

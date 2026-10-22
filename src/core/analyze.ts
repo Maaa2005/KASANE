@@ -238,6 +238,8 @@ async function readPackageJson(
       scripts?: Record<string, string>;
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
+      packageManager?: unknown;
+      devEngines?: { packageManager?: unknown };
     };
     const scripts =
       parsed.scripts !== null && typeof parsed.scripts === "object"
@@ -257,10 +259,31 @@ async function readPackageJson(
         ...Object.keys(parsed.dependencies ?? {}),
         ...Object.keys(parsed.devDependencies ?? {}),
       ],
+      packageManager: declaredManager(parsed),
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * The manager in `"packageManager": "pnpm@9.1.0+sha512..."`, or in npm's
+ * `"devEngines": { "packageManager": { "name": "pnpm" } }`.
+ */
+function declaredManager(parsed: {
+  packageManager?: unknown;
+  devEngines?: { packageManager?: unknown };
+}): string | undefined {
+  if (typeof parsed.packageManager === "string") {
+    return parsed.packageManager.split("@")[0]?.trim() || undefined;
+  }
+  const devEngine = parsed.devEngines?.packageManager;
+  const first: unknown = Array.isArray(devEngine) ? devEngine[0] : devEngine;
+  if (first !== null && typeof first === "object") {
+    const name = (first as { name?: unknown }).name;
+    if (typeof name === "string" && name.trim() !== "") return name.trim();
+  }
+  return undefined;
 }
 
 /**
@@ -392,6 +415,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     );
   }
   const packageJson = await packageScriptsFor(absoluteRoot, ".", packageJsonCache);
+  const rootPackageJson = await packageJsonCache.get(".");
 
   return {
     repository: absoluteRoot,
@@ -401,6 +425,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     packageJsonScripts: packageJson?.scripts ?? null,
     packageJsonDependencies: packageJson?.dependencies ?? [],
     packageScripts,
+    declaredPackageManager: rootPackageJson?.packageManager,
   };
 }
 

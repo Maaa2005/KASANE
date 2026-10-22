@@ -13,12 +13,19 @@ function detectLockfileManagers(repository: string): string[] {
   return Array.from(new Set(found));
 }
 
+const KNOWN_MANAGERS = new Set<string>(Object.values(LOCKFILE_MANAGERS));
+
 export const packageManagerConflictRule: DiagnosticRule = {
   id: "KASANE004",
 
   async run(context: AnalysisContext): Promise<Diagnostic[]> {
     const diagnostics: Diagnostic[] = [];
     const lockfileManagers = detectLockfileManagers(context.repository);
+    const declared =
+      context.declaredPackageManager !== undefined &&
+      KNOWN_MANAGERS.has(context.declaredPackageManager)
+        ? context.declaredPackageManager
+        : undefined;
 
     if (lockfileManagers.length > 1) {
       diagnostics.push({
@@ -30,26 +37,49 @@ export const packageManagerConflictRule: DiagnosticRule = {
       });
     }
 
-    if (lockfileManagers.length === 1) {
-      const [expected] = lockfileManagers;
-      const reported = new Set<string>();
+    const [lockfileManager] = lockfileManagers;
+    if (
+      declared !== undefined &&
+      lockfileManagers.length === 1 &&
+      lockfileManager !== declared
+    ) {
+      diagnostics.push({
+        ruleId: "KASANE004",
+        severity: "error",
+        title: "Package manager declaration conflicts with lockfile",
+        message: `package.json "packageManager" declares "${declared}" but the repository lockfile indicates "${lockfileManager}"`,
+        metadata: { declared, lockfile: lockfileManager },
+      });
+      return diagnostics;
+    }
 
-      for (const instruction of context.instructions) {
-        for (const manager of extractMentionedManagers(instruction.content)) {
-          if (manager === expected) continue;
-          const key = `${instruction.source.relativePath}:${manager}`;
-          if (reported.has(key)) continue;
-          reported.add(key);
+    // A single lockfile settles which manager the repository uses. Without
+    // one (a fresh clone of a repository that does not commit it), or with
+    // several, the package.json declaration does: Corepack enforces it.
+    const expected =
+      lockfileManagers.length === 1 ? lockfileManager : declared;
+    if (expected === undefined) return diagnostics;
+    const basis =
+      lockfileManagers.length === 1
+        ? "the repository lockfile indicates"
+        : 'package.json "packageManager" declares';
 
-          diagnostics.push({
-            ruleId: "KASANE004",
-            severity: "warning",
-            title: "Package manager mismatch",
-            message: `Instruction mentions "${manager}" but the repository lockfile indicates "${expected}"`,
-            source: instruction.source,
-            metadata: { mentioned: manager, expected },
-          });
-        }
+    const reported = new Set<string>();
+    for (const instruction of context.instructions) {
+      for (const manager of extractMentionedManagers(instruction.content)) {
+        if (manager === expected) continue;
+        const key = `${instruction.source.relativePath}:${manager}`;
+        if (reported.has(key)) continue;
+        reported.add(key);
+
+        diagnostics.push({
+          ruleId: "KASANE004",
+          severity: "warning",
+          title: "Package manager mismatch",
+          message: `Instruction mentions "${manager}" but ${basis} "${expected}"`,
+          source: instruction.source,
+          metadata: { mentioned: manager, expected },
+        });
       }
     }
 

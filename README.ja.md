@@ -199,9 +199,9 @@ KASANEは**静的解析で再現できる範囲**のみを対象とします。�
 - リポジトリルート以外の`.gitignore`。検出ファイルの除外にはルートの
   `.gitignore`と`.git/info/exclude`のみを適用します。独自の`.git`を持つ
   ディレクトリ(worktree・submodule)は別のリポジトリとして読み飛ばします
-- ワークスペース配下の`package.json` scripts。KASANE003は常にルートの
-  `package.json`と照合するため、ワークスペース内でのみ有効なコマンドを
-  「存在しない」と報告します
+- ワークスペース配下のパッケージが使うパッケージマネージャ。KASANE004は
+  ルートのロックファイルとルートの`package.json`の`packageManager`だけを
+  読みます(KASANE003はパッケージ自身の`package.json`のscriptsも照合します)
 
 ## ローカルでの静的解析のみ
 

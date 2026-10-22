@@ -421,21 +421,49 @@ export function isDependencyBinary(
 
 const MANAGER_MENTION_PATTERN = /\b(npm|pnpm|yarn|bun)\b/g;
 
+// A manager name, optionally in code, emphasis or quotes: `npm`, **npm**.
+const MANAGER_NAME = String.raw`[\x60*_"']*(?:npm|pnpm|yarn|bun)\b[\x60*_"']*`;
+// "npm", "npm or yarn", "npm, yarn, or bun", "npm/yarn". A bare comma does
+// not continue the list: in "Don't use npm, pnpm is required" pnpm is the
+// manager to use.
+const MANAGER_LIST = String.raw`${MANAGER_NAME}(?:(?:\s*,\s*${MANAGER_NAME})*(?:\s*,?\s*(?:\/|\bor\b|\bnor\b|\band\b)\s*${MANAGER_NAME})+)?`;
+const NEGATION = String.raw`(?:(?:do|does|did|must|should)\s+not|(?:do|does|must|should)n[’']?t|don[’']?t|never|avoid|stop|without)(?:\s+(?:use|using|run|running|call|calling|invoke|invoking))?|(?:instead\s+of|rather\s+than)(?:\s+using)?|(?:switch|switched|switching|migrate|migrated|migrating|move|moved|moving)\s+(?:away\s+)?from|not|no`;
+
 /**
  * A manager named as the thing *not* to use. "Use pnpm instead of npm" and
  * "Do not use npm" both name npm, but neither instructs an agent to run it,
  * and counting them makes KASANE004 contradict the very line that resolves
  * the ambiguity.
  */
-const NEGATED_MANAGER_PATTERN =
-  /\b(?:do\s+not\s+use|does\s+not\s+use|don'?t\s+use|never\s+use|stop\s+using|avoid(?:\s+using)?|instead\s+of|rather\s+than|not|no)\s+(?:the\s+)?(?:npm|pnpm|yarn|bun)\b/gi;
+const NEGATED_MANAGER_PATTERNS = [
+  new RegExp(String.raw`\b(?:${NEGATION})\s+(?:the\s+)?${MANAGER_LIST}`, "gi"),
+  new RegExp(
+    String.raw`${MANAGER_LIST}\s+(?:is|are)\s+(?:not\s+(?:allowed|supported|used|permitted)|forbidden|prohibited|banned|disallowed)\b`,
+    "gi",
+  ),
+];
+
+/**
+ * "npm" as the registry or the ecosystem rather than the CLI: "publish to
+ * npm", "an npm package", "npm scripts". These say nothing about which
+ * package manager to run.
+ */
+const GENERIC_NPM_PATTERNS = [
+  /\bnpm\s+(?:registry|packages?|modules?|scripts?|org(?:anization)?|account|scope|ecosystem|page|badge)\b/g,
+  /\b(?:on|from)\s+(?:the\s+)?npm\b(?!\s+(?:install|i|ci|run|test|exec|start)\b)/g,
+  // "Publish the package to npm", but not "switch to npm".
+  /(?<=\b(?:publish|publishes|published|publishing|release|releases|released|releasing|upload|uploads|uploaded|uploading|push|pushes|pushed|pushing)\b[^.;:!?\n]{0,40}?\bto\s+(?:the\s+)?)npm\b/gi,
+];
 
 /**
  * Extracts package manager names the text tells an agent to use, ignoring
  * ones it explicitly tells the agent not to use. Used by KASANE004.
  */
 export function extractMentionedManagers(text: string): PackageManager[] {
-  const positive = text.replace(NEGATED_MANAGER_PATTERN, " ");
+  const positive = [...NEGATED_MANAGER_PATTERNS, ...GENERIC_NPM_PATTERNS].reduce(
+    (remaining, pattern) => remaining.replace(pattern, " "),
+    text,
+  );
   const matches = positive.match(MANAGER_MENTION_PATTERN) ?? [];
   return Array.from(new Set(matches)) as PackageManager[];
 }

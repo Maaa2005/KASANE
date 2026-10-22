@@ -25,6 +25,44 @@ describe("extractMentionedManagers", () => {
   it("returns nothing when every mention is negated", () => {
     expect(extractMentionedManagers("Never use yarn in this repo.")).toEqual([]);
   });
+
+  it.each([
+    ["Do not use `npm`; use `pnpm`.", ["pnpm"]],
+    ["Use `pnpm` instead of `npm`.", ["pnpm"]],
+    ["Don’t use **yarn**.", []],
+    ["Install with `pnpm install` (not `npm install`).", ["pnpm"]],
+    ["Never run `npm install`.", []],
+    ["Use pnpm, not npm or yarn.", ["pnpm"]],
+    ["Do not use npm, yarn, or bun.", []],
+    ["Avoid npm and yarn.", []],
+    ["npm is not allowed; use pnpm.", ["pnpm"]],
+    ["npm and yarn are forbidden.", []],
+    ["Switch from npm to pnpm.", ["pnpm"]],
+  ])("ignores every manager a negation names: %j", (text, expected) => {
+    expect(extractMentionedManagers(text)).toEqual(expected);
+  });
+
+  it("keeps the manager after a comma that ends the negated list", () => {
+    expect(extractMentionedManagers("Don't use npm, pnpm is required.")).toEqual(["pnpm"]);
+  });
+
+  it.each([
+    ["Publish the package to npm with `pnpm publish`.", ["pnpm"]],
+    ["This package is published on npm.", []],
+    ["Add an npm script for it and run it with pnpm.", ["pnpm"]],
+    ["Released to the npm registry.", []],
+  ])("ignores npm as the registry rather than the CLI: %j", (text, expected) => {
+    expect(extractMentionedManagers(text)).toEqual(expected);
+  });
+
+  it.each([
+    ["Run `npm install`.", ["npm"]],
+    ["Use **npm**.", ["npm"]],
+    ["Move to npm.", ["npm"]],
+    ["Publishing to npm: run `npm publish`.", ["npm"]],
+  ])("still returns a manager the text tells the agent to run: %j", (text, expected) => {
+    expect(extractMentionedManagers(text)).toEqual(expected);
+  });
 });
 
 const scripts = (text: string) =>

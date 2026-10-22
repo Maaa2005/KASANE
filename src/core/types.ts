@@ -98,11 +98,17 @@ export interface AnalysisContext {
    * when there is none. A path missing from the map uses the root fields.
    */
   packageScripts?: ReadonlyMap<string, PackageScripts | null>;
+  /**
+   * The package manager the root package.json declares in `packageManager`
+   * (or `devEngines.packageManager`), e.g. "pnpm" for "pnpm@9.1.0".
+   */
+  declaredPackageManager?: string;
 }
 
 export interface PackageScripts {
   scripts: string[];
   dependencies: string[];
+  packageManager?: string;
 }
 
 export interface DiagnosticRule {

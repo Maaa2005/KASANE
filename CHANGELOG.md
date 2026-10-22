@@ -80,6 +80,19 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 - A `--path` outside the repository (`../x.ts`, an absolute path
   elsewhere) was silently accepted, and a missing `--root` was
   reported as an analysis failure (exit 3). Both are now usage errors.
+- KASANE004 and `diff` counted a package manager named only to forbid it
+  when the name was in code or emphasis (``Do not use `npm` ``), in a
+  list (`not npm or yarn`), or after "never run", "switch from" or before
+  "is not allowed". npm as the registry ("publish to npm", "npm
+  scripts") is no longer read as an instruction to run npm either.
+- Instruction text gained spaces around inline code, emphasis and links
+  (`` `npm` ; ``, `un safe` for `un*safe*`), which affected duplicate
+  detection and the text shown in `explain` and `diff`.
+- KASANE004 checked nothing in a repository that does not commit a
+  lockfile. It now falls back to the root `package.json` `packageManager`
+  field (or `devEngines.packageManager`), which also picks the manager
+  when several lockfiles exist, and reports a declaration that disagrees
+  with the lockfile as an error.
 
 ### Changed
 
