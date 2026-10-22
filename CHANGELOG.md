@@ -20,7 +20,8 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   checked the remainder against the repository: `~/.claude/CLAUDE.md`
   was reported as a missing `.claude/CLAUDE.md`, and `/home/user/x.md` as
   a missing `home/user/x.md`. Those paths are no longer treated as
-  repository references; absolute paths are still reported by KASANE006.
+  repository references; absolute paths are still reported by KASANE006,
+  which now also covers `/root/...`.
 - KASANE002 reported template paths such as `notes/YYYY-MM-DD-topic.md`
   or `docs/ADR-XXXX.md` as broken references.
 

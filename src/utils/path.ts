@@ -93,7 +93,7 @@ export function extractExplicitReferences(
 }
 
 const UNIX_ABSOLUTE_PATTERN =
-  /(?<![\w./-])\/(?:Users|home|opt|srv|mnt|var|tmp)\/[\w.\-/]+/g;
+  /(?<![\w./-])\/(?:Users|home|root|opt|srv|mnt|var|tmp)\/[\w.\-/]+/g;
 const WINDOWS_DRIVE_PATTERN = /\b[A-Za-z]:[\\/][^\s"'`)\]]+/g;
 const WINDOWS_UNC_PATTERN = /\\\\[A-Za-z0-9._-]+\\[^\s"'`)\]]+/g;
 

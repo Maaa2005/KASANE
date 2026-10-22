@@ -19,6 +19,19 @@ describe("absolutePathRule (KASANE006)", () => {
     expect(diagnostics[0]).toMatchObject({ ruleId: "KASANE006", severity: "warning" });
   });
 
+  it("flags a path under /root", async () => {
+    const context = makeContext({
+      instructions: [
+        makeInstruction({
+          relativePath: "AGENTS.md",
+          content: "Imported from /root/.claude/CLAUDE.md on the VM.",
+        }),
+      ],
+    });
+
+    expect(await absolutePathRule.run(context)).toHaveLength(1);
+  });
+
   it("does not flag a relative path", async () => {
     const context = makeContext({
       instructions: [

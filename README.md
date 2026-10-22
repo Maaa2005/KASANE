@@ -183,8 +183,10 @@ analysis**. The following are intentionally out of scope for now:
   which is an upper bound, not a prediction)
 - In-agent-only reference syntax, such as Claude Code's `@path` imports
 - Behavior differences caused by agent version or platform
-- `.gitignore` files below the repository root — only the root one is
-  applied when filtering discovered files
+- `.gitignore` files below the repository root — only the root one and
+  `.git/info/exclude` are applied when filtering discovered files.
+  Directories with their own `.git` (worktrees, submodules) are skipped
+  as separate repositories
 - Workspace-local `package.json` scripts: KASANE003 checks every
   instruction against the **root** `package.json`, so a command that is
   valid inside a workspace package is reported as missing
