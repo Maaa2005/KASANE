@@ -8,6 +8,22 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Nested git checkouts were analyzed as part of the parent repository.
+  A worktree under `.claude/worktrees/` (or any directory with its own
+  `.git` file or directory, such as a submodule) doubled every config file
+  and flooded the report with duplicate-instruction warnings. Such
+  subtrees are now skipped, and `.git/info/exclude` is honored alongside
+  the root `.gitignore`.
+- KASANE002 cut the prefix off home-relative and absolute paths and
+  checked the remainder against the repository: `~/.claude/CLAUDE.md`
+  was reported as a missing `.claude/CLAUDE.md`, and `/home/user/x.md` as
+  a missing `home/user/x.md`. Those paths are no longer treated as
+  repository references; absolute paths are still reported by KASANE006.
+- KASANE002 reported template paths such as `notes/YYYY-MM-DD-topic.md`
+  or `docs/ADR-XXXX.md` as broken references.
+
 ## [0.2.0] - 2026-07-28
 
 First published release. Fixes found by a cross-model review of the 0.1.0

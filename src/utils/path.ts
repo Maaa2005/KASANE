@@ -6,7 +6,15 @@ const URL_PATTERN = /https?:\/\/\S+/g;
  * as file names and reported as broken references.
  */
 const PROSE_REFERENCE_PATTERN =
-  /(?:\.{1,2}\/)?(?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9]+/g;
+  /(?<![\w.\-/\\~])(?:\.{1,2}\/)?(?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9]+/g;
+
+/**
+ * Template placeholders such as `YYYY-MM-DD`, `yyyy/mm` or `ADR-XXXX.md`.
+ * A run of three or more X/x only counts when no letter touches it, so
+ * ordinary words ("max.md", "boxxx") are not mistaken for placeholders.
+ */
+const PLACEHOLDER_PATTERN =
+  /YYYY|yyyy|(?<![A-Za-z])(?:X{3,}|x{3,})(?![A-Za-z])/;
 
 /**
  * A whole token that is a relative file path. Used for link targets and
@@ -26,7 +34,9 @@ const GLOB_CHARS = /[*?[\]{}()!]/;
 export function extractFileReferences(text: string): string[] {
   const withoutUrls = text.replace(URL_PATTERN, " ");
   const matches = withoutUrls.match(PROSE_REFERENCE_PATTERN) ?? [];
-  return Array.from(new Set(matches));
+  return Array.from(
+    new Set(matches.filter((match) => !PLACEHOLDER_PATTERN.test(match))),
+  );
 }
 
 function normalizeReference(raw: string): string | null {
@@ -43,9 +53,11 @@ function normalizeReference(raw: string): string | null {
   if (GLOB_CHARS.test(value)) return null;
 
   value = value.replace(/\\/g, "/");
-  if (value.startsWith("/")) return null;
+  // Absolute paths belong to KASANE006; home paths are outside the repo.
+  if (value.startsWith("/") || value.startsWith("~")) return null;
   value = value.replace(/^\.\//, "");
 
+  if (PLACEHOLDER_PATTERN.test(value)) return null;
   return EXPLICIT_REFERENCE_PATTERN.test(value) ? value : null;
 }
 

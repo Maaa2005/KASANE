@@ -39,7 +39,42 @@ function loadGitignore(root: string): ReturnType<typeof ignore> {
   if (fs.existsSync(gitignorePath)) {
     ig.add(fs.readFileSync(gitignorePath, "utf8"));
   }
+  // `.git/info/exclude` is honored by git but never committed, so it is the
+  // only place some users keep local-only agent files.
+  const excludePath = path.join(root, ".git", "info", "exclude");
+  if (fs.existsSync(excludePath)) {
+    ig.add(fs.readFileSync(excludePath, "utf8"));
+  }
   return ig;
+}
+
+// Nested checkouts (worktrees, submodules, vendored repos) are separate
+// project roots for agents, so their files are not this repository's context.
+// `.git` is a file in worktrees and submodules, a directory in plain clones.
+function createNestedRepoCheck(
+  root: string,
+): (relativePath: string) => boolean {
+  const cache = new Map<string, boolean>();
+
+  const isNestedRepo = (relativeDir: string): boolean => {
+    const cached = cache.get(relativeDir);
+    if (cached !== undefined) return cached;
+    const result = fs.existsSync(path.join(root, relativeDir, ".git"));
+    cache.set(relativeDir, result);
+    return result;
+  };
+
+  return (relativePath) => {
+    // Walk ancestors below the root only; the root's own `.git` must not
+    // exclude everything.
+    const segments = relativePath.split("/").slice(0, -1);
+    let dir = "";
+    for (const segment of segments) {
+      dir = dir === "" ? segment : `${dir}/${segment}`;
+      if (isNestedRepo(dir)) return true;
+    }
+    return false;
+  };
 }
 
 export async function discoverConfigFiles(
@@ -47,6 +82,7 @@ export async function discoverConfigFiles(
 ): Promise<DiscoveredFile[]> {
   const absoluteRoot = path.resolve(root);
   const ig = loadGitignore(absoluteRoot);
+  const insideNestedRepo = createNestedRepoCheck(absoluteRoot);
 
   const results: DiscoveredFile[] = [];
   const seen = new Set<string>();
@@ -66,6 +102,7 @@ export async function discoverConfigFiles(
 
     for (const relativePath of matches) {
       if (ig.ignores(relativePath)) continue;
+      if (insideNestedRepo(relativePath)) continue;
       if (seen.has(relativePath)) continue;
       seen.add(relativePath);
       results.push({
