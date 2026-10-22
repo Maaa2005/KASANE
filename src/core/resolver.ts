@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { minimatch } from "minimatch";
 import { realPathOf } from "./aliases.js";
@@ -13,9 +14,51 @@ export interface ResolveOptions {
   targetPath?: string;
 }
 
-function toRelativePosixPath(repository: string, targetPath: string): string {
-  const relative = path.relative(repository, path.resolve(repository, targetPath));
-  return relative.split(path.sep).join("/");
+function isExistingDirectory(absolutePath: string): boolean {
+  try {
+    return fs.statSync(absolutePath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** A `--path` that points outside the repository being analyzed. */
+export class TargetPathError extends Error {}
+
+export interface ResolvedTargetPath {
+  /** POSIX path relative to the repository; `.` for the root itself. */
+  relativePath: string;
+  isDirectory: boolean;
+}
+
+/**
+ * Resolves `--path` against the repository root. A directory is recognized
+ * on disk or by a trailing separator, so a directory that does not exist
+ * yet can still be named as `src/new/`.
+ */
+export function resolveTargetPath(
+  repository: string,
+  targetPath: string,
+): ResolvedTargetPath {
+  const absolute = path.resolve(repository, targetPath);
+  const relative = path.relative(repository, absolute);
+  if (
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new TargetPathError(
+      `--path is outside the repository: ${targetPath}`,
+    );
+  }
+
+  const isDirectory =
+    relative === "" || /[\\/]$/.test(targetPath) || isExistingDirectory(absolute);
+
+  return {
+    relativePath: relative === "" ? "." : relative.split(path.sep).join("/"),
+    isDirectory,
+  };
 }
 
 function isAncestorDir(scopeDir: string, targetDir: string): boolean {
@@ -28,12 +71,22 @@ export function resolveEffectiveContext(
   diagnostics: Diagnostic[],
   options: ResolveOptions,
 ): EffectiveContext {
-  const targetRelativePath = options.targetPath
-    ? toRelativePosixPath(context.repository, options.targetPath)
+  const target = options.targetPath
+    ? resolveTargetPath(context.repository, options.targetPath)
     : undefined;
-  const targetDir = targetRelativePath
-    ? path.posix.dirname(targetRelativePath)
+  // A directory gets what an agent started in it loads: config files in it
+  // and its parents, plus glob rules that match any file under it.
+  const targetDir = target
+    ? target.isDirectory
+      ? target.relativePath
+      : path.posix.dirname(target.relativePath)
     : undefined;
+  const matchesGlob = (pattern: string): boolean => {
+    if (!target) return true;
+    if (!target.isDirectory) return minimatch(target.relativePath, pattern);
+    if (target.relativePath === ".") return true;
+    return minimatch(target.relativePath, pattern, { partial: true });
+  };
 
   const instructions = context.instructions.filter((instruction) => {
     if (!instruction.agents.includes(options.agent)) return false;
@@ -42,9 +95,7 @@ export function resolveEffectiveContext(
     if (instruction.scope.type === "directory") {
       return isAncestorDir(instruction.scope.patterns[0], targetDir);
     }
-    return instruction.scope.patterns.some((pattern) =>
-      minimatch(targetRelativePath as string, pattern),
-    );
+    return instruction.scope.patterns.some(matchesGlob);
   });
 
   const includedPaths = new Set(
@@ -85,7 +136,7 @@ export function resolveEffectiveContext(
 
   return {
     agent: options.agent,
-    targetPath: targetRelativePath,
+    targetPath: target?.relativePath,
     sources,
     instructions,
     diagnostics: scopedDiagnostics,

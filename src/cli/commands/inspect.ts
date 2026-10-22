@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { checkLocationOptions } from "../options.js";
 import { analyzeRepository } from "../../core/analyze.js";
 import { renderText } from "../../reporters/text.js";
 import { renderJson } from "../../reporters/json.js";
@@ -49,6 +50,13 @@ export function registerInspectCommand(program: Command): void {
         console.error(
           `Invalid --fail-on value: ${options.failOn} (expected warning or error)`,
         );
+        process.exitCode = 2;
+        return;
+      }
+
+      const locationError = await checkLocationOptions(options);
+      if (locationError !== null) {
+        console.error(locationError);
         process.exitCode = 2;
         return;
       }

@@ -73,6 +73,13 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   and commands that target another package (`--filter`, `--workspace`,
   `--dir`, `cd web && ...`) or opt out with `--if-present` are skipped.
   It also now reads `npm test`, `npm t` and `npm --silent run x`.
+- `explain --path` and `diff --path` given a directory treated it as a
+  file in its parent, so the directory's own `CLAUDE.md` and Cursor rules
+  for the files under it were left out. A directory, existing or written
+  with a trailing slash, now gets what an agent started in it loads.
+- A `--path` outside the repository (`../x.ts`, an absolute path
+  elsewhere) was silently accepted, and a missing `--root` was
+  reported as an analysis failure (exit 3). Both are now usage errors.
 
 ### Changed
 
@@ -84,6 +91,9 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   `.cursor/rules`. `inspect` still checks them.
 - `.github/copilot-instructions.md` below the repository root is no
   longer part of Copilot's context; Copilot reads only the root one.
+- Usage errors exit with code 2, including unknown options and commands,
+  which exited with 1 — the code `inspect --fail-on` uses for findings.
+  The exit codes are now documented.
 
 ## [0.2.0] - 2026-07-28
 

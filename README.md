@@ -136,8 +136,8 @@ Requires Node.js >= 20.
 
 ```bash
 kasane inspect
-kasane explain --agent <codex|claude|cursor|gemini|copilot> [--path <file>]
-kasane diff --agents <agent,agent,...> [--path <file>]
+kasane explain --agent <codex|claude|cursor|gemini|copilot> [--path <file|dir>]
+kasane diff --agents <agent,agent,...> [--path <file|dir>]
 ```
 
 | Command   | Purpose                                                                 |
@@ -154,9 +154,17 @@ secret sitting in a context file is not copied into CI logs alongside the
 diagnostic that reports it. Pass `--include-content` when you want the
 file bodies; secret-looking strings stay masked either way.
 `inspect` also supports `--fail-on warning|error` for CI gating.
-`explain`/`diff` also support `--path <file>` to scope the result to a
-single target file (directory-scoped and Cursor `globs`-scoped instructions
-are resolved accordingly).
+`explain`/`diff` also support `--path <file|dir>` to scope the result to
+what an agent loads for that file (directory-scoped and Cursor
+`globs`-scoped instructions are resolved accordingly). For a directory,
+that is the config files in it and above it, plus the glob-scoped rules
+that match any file under it. The path is resolved against `--root` and
+must stay inside it.
+
+Exit codes: `0` success, `1` diagnostics at or above `--fail-on`, `2`
+invalid arguments (unknown option, bad `--format`, `--root` that is not a
+directory, `--path` outside the repository), `3` the analysis failed,
+`4` unexpected error.
 
 ## Supported agents / config files
 

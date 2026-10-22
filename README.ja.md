@@ -135,8 +135,8 @@ Node.js >= 20 が必要です。
 
 ```bash
 kasane inspect
-kasane explain --agent <codex|claude|cursor|gemini|copilot> [--path <file>]
-kasane diff --agents <agent,agent,...> [--path <file>]
+kasane explain --agent <codex|claude|cursor|gemini|copilot> [--path <file|dir>]
+kasane diff --agents <agent,agent,...> [--path <file|dir>]
 ```
 
 | コマンド    | 用途                                                             |
@@ -153,8 +153,15 @@ JSON出力は既定で各設定ファイルの全文を含めません。コン�
 しまわないためです。全文が必要なときは`--include-content`を付けてください。
 どちらの場合も秘密情報らしき文字列はマスクされます。
 `inspect`はCI向けに`--fail-on warning|error`にも対応します。
-`explain`/`diff`は`--path <file>`で対象ファイルを指定でき、
+`explain`/`diff`は`--path <file|dir>`で対象のファイルかディレクトリを指定でき、
 ディレクトリ階層やCursorの`globs`によるスコープ解決を反映した結果を返します。
+ディレクトリを指定した場合は、そのディレクトリと親にある設定ファイルと、
+配下のいずれかのファイルに一致する`globs`付きルールが対象です。
+パスは`--root`を基準に解決し、その外は指定できません。
+
+終了コード: `0` 成功、`1` `--fail-on`以上の診断あり、`2` 引数の誤り
+(不明なオプション、不正な`--format`、ディレクトリでない`--root`、
+リポジトリ外の`--path`)、`3` 解析の失敗、`4` 想定外のエラー。
 
 ## 対応エージェント・設定ファイル
 

@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { checkLocationOptions } from "../options.js";
 import { buildAnalysisContext, runDiagnostics } from "../../core/analyze.js";
 import { computeDiff } from "../../core/differ.js";
 import { renderDiffText } from "../../reporters/diff-text.js";
@@ -29,7 +30,7 @@ export function registerDiffCommand(program: Command): void {
       "--agents <agents>",
       `comma-separated list of agents to compare (${VALID_AGENTS.join("|")})`,
     )
-    .option("--path <path>", "limit the comparison to a specific file")
+    .option("--path <path>", "limit the comparison to a file or directory")
     .option("--root <path>", "repository root to analyze", ".")
     .option("--format <format>", "output format: text or json", "text")
     .option(
@@ -68,6 +69,13 @@ export function registerDiffCommand(program: Command): void {
         console.error(
           `Invalid --format value: ${options.format} (expected text or json)`,
         );
+        process.exitCode = 2;
+        return;
+      }
+
+      const locationError = await checkLocationOptions(options);
+      if (locationError !== null) {
+        console.error(locationError);
         process.exitCode = 2;
         return;
       }

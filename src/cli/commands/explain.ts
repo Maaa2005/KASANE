@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { checkLocationOptions } from "../options.js";
 import { buildAnalysisContext, runDiagnostics } from "../../core/analyze.js";
 import { resolveEffectiveContext } from "../../core/resolver.js";
 import { renderExplainText } from "../../reporters/explain-text.js";
@@ -30,7 +31,7 @@ export function registerExplainCommand(program: Command): void {
       "--agent <agent>",
       `which agent to explain (${VALID_AGENTS.join("|")})`,
     )
-    .option("--path <path>", "limit the explanation to a specific file")
+    .option("--path <path>", "limit the explanation to a file or directory")
     .option("--root <path>", "repository root to analyze", ".")
     .option("--format <format>", "output format: text or json", "text")
     .option("--show-content", "print the full content of applicable instructions", false)
@@ -60,6 +61,13 @@ export function registerExplainCommand(program: Command): void {
         console.error(
           `Invalid --format value: ${options.format} (expected text or json)`,
         );
+        process.exitCode = 2;
+        return;
+      }
+
+      const locationError = await checkLocationOptions(options);
+      if (locationError !== null) {
+        console.error(locationError);
         process.exitCode = 2;
         return;
       }
