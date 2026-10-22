@@ -208,6 +208,11 @@ analysis**. The following are intentionally out of scope for now:
 - Which package manager a workspace package uses: KASANE004 reads only
   the root lockfile and the root `package.json` `packageManager` field.
   (KASANE003 does check a package's own `package.json` scripts.)
+- Which base a relative path in a config file is meant against.
+  KASANE002 accepts a reference that exists relative to either the
+  repository root or the config file's own directory, so a nested
+  `CLAUDE.md` that writes `docs/x.md` meaning the root `docs/` is not
+  flagged, and neither is the reverse
 
 ## It's local, static analysis only
 

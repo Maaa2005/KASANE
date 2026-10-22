@@ -22,6 +22,7 @@ interface MdNode {
   type: string;
   value?: string;
   url?: string;
+  identifier?: string;
   children?: MdNode[];
   position?: {
     start: { line: number };
@@ -80,18 +81,54 @@ interface Inline {
   codeSpans: string[];
 }
 
-function collectInline(node: MdNode, acc: Inline): void {
+/** Link reference definitions (`[id]: docs/guide.md`) keyed by identifier. */
+type Definitions = ReadonlyMap<string, string>;
+
+/** Matches the way CommonMark compares labels: case and spacing ignored. */
+function normalizeLabel(label: string): string {
+  return label.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function collectDefinitions(node: MdNode, acc: Map<string, string>): void {
+  if (
+    node.type === "definition" &&
+    typeof node.identifier === "string" &&
+    typeof node.url === "string"
+  ) {
+    const key = normalizeLabel(node.identifier);
+    // The first definition of a label wins, as in CommonMark.
+    if (!acc.has(key)) {
+      acc.set(key, node.url);
+    }
+  }
+  for (const child of node.children ?? []) {
+    collectDefinitions(child, acc);
+  }
+}
+
+function collectInline(node: MdNode, acc: Inline, definitions: Definitions): void {
   if (
     (node.type === "link" || node.type === "image") &&
     typeof node.url === "string"
   ) {
     acc.linkTargets.push(node.url);
   }
+  // `[guide][g]` with `[g]: docs/guide.md` elsewhere in the file points at
+  // the definition's URL; the reference itself carries only the label.
+  if (
+    (node.type === "linkReference" || node.type === "imageReference") &&
+    typeof node.identifier === "string"
+  ) {
+    const url = definitions.get(normalizeLabel(node.identifier));
+    if (url !== undefined) {
+      acc.linkTargets.push(url);
+    }
+  }
   if (node.type === "inlineCode" && typeof node.value === "string") {
     acc.codeSpans.push(node.value);
   }
   for (const child of ownChildren(node)) {
-    collectInline(child, acc);
+    collectInline(child, acc, definitions);
   }
 }
 
@@ -100,6 +137,8 @@ export function parseMarkdown(content: string): ParsedMarkdown {
 
   const tree = unified().use(remarkParse).parse(body) as unknown as MdNode;
   const instructions: MarkdownInstruction[] = [];
+  const definitions = new Map<string, string>();
+  collectDefinitions(tree, definitions);
 
   const visit = (node: MdNode, parentType?: string): void => {
     // A paragraph directly inside a listItem is the item's own content,
@@ -112,7 +151,7 @@ export function parseMarkdown(content: string): ParsedMarkdown {
       const text = collectText(node);
       if (text.length > 0) {
         const inline: Inline = { linkTargets: [], codeSpans: [] };
-        collectInline(node, inline);
+        collectInline(node, inline, definitions);
         instructions.push({
           content: text,
           lineStart: node.position.start.line + lineOffset,

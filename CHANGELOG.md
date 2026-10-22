@@ -93,6 +93,8 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   field (or `devEngines.packageManager`), which also picks the manager
   when several lockfiles exist, and reports a declaration that disagrees
   with the lockfile as an error.
+- KASANE002 did not check reference-style links (`[guide][g]` with
+  `[g]: docs/guide.md` elsewhere in the file), only inline ones.
 
 ### Changed
 

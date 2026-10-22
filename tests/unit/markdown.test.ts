@@ -17,6 +17,26 @@ describe("parseMarkdown nested lists and links", () => {
     expect(result.instructions[0].linkTargets).toEqual(["docs/guide.md"]);
   });
 
+  it.each([
+    ["full", "See [the guide][g] first.\n\n[g]: docs/guide.md"],
+    ["collapsed", "See [guide][] first.\n\n[guide]: docs/guide.md"],
+    ["shortcut", "See [guide] first.\n\n[guide]: docs/guide.md"],
+    ["case-insensitive", "See [the guide][G  Uide] first.\n\n[g uide]: docs/guide.md"],
+    ["image", "See ![diagram][d] here.\n\n[d]: docs/guide.md"],
+  ])("collects the target of a reference-style link (%s)", (_kind, source) => {
+    const result = parseMarkdown(source);
+
+    expect(result.instructions[0].linkTargets).toEqual(["docs/guide.md"]);
+  });
+
+  it("uses the first definition of a repeated label", () => {
+    const result = parseMarkdown(
+      "See [guide][g].\n\n[g]: docs/first.md\n[g]: docs/second.md",
+    );
+
+    expect(result.instructions[0].linkTargets).toEqual(["docs/first.md"]);
+  });
+
   it("collects inline code spans", () => {
     const result = parseMarkdown("Run `node dist/index.js` to check.");
 
