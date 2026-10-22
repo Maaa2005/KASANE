@@ -161,11 +161,20 @@ JSON出力は既定で各設定ファイルの全文を含めません。コン�
 | エージェント   | ファイル                                                          |
 | -------------- | -------------------------------------------------------------------- |
 | OpenAI Codex   | `AGENTS.md`                                                          |
-| Claude Code    | `CLAUDE.md`、`CLAUDE.local.md`                                       |
-| Cursor         | `.cursor/rules/**/*.md`、`.cursor/rules/**/*.mdc`、`.cursorrules`    |
+| Claude Code    | `CLAUDE.md`、`.claude/CLAUDE.md`、`CLAUDE.local.md`                  |
+| Cursor         | `.cursor/rules/**/*.mdc`、`.cursorrules`、`AGENTS.md`                |
 | Gemini CLI     | `GEMINI.md`                                                          |
-| GitHub Copilot | `.github/copilot-instructions.md`                                    |
+| GitHub Copilot | `.github/copilot-instructions.md`(リポジトリ直下のみ)               |
 | MCPサーバー    | `.mcp.json`、`mcp.json`、`.cursor/mcp.json`、`.claude/mcp.json`(検出のみ、指示としては解析しない) |
+
+Cursorルールは任意の深さの`.cursor/rules`から読み、Cursorのルール種別に
+従います。`alwaysApply: true`のルールは属するサブツリー全体に届き、`globs`
+は無視します。それ以外は`globs`に一致するファイルに限定します。`globs`は
+リスト・単一の文字列・カンマ区切りの文字列のどれでもよく、`{ts,tsx}`の
+中のカンマは区切りとして扱いません。`description`だけのルールはサブツリー
+全体に届くものとして扱います。どれも無いルールは@で指定したときだけ適用
+され、`.cursor/rules`内の`.md`ファイルはルールではありません。この2つは
+`explain`と`diff`には含めませんが、`inspect`では検査します。
 
 ### 既知の制限(v0.2.0では再現しない範囲)
 
@@ -176,9 +185,13 @@ KASANEは**静的解析で再現できる範囲**のみを対象とします。�
   どうか(Agent-Requested rulesは、そのルールが属するサブツリー全体に届くもの
   として報告します。これは上限値であり、実行時の予測ではありません)
 - エージェント内部でのみ解決される参照構文(例: Claude Codeの`@path`インポート)
+- Claude CodeとCopilotにとっての`AGENTS.md`。Claude Codeは`CLAUDE.md`が
+  無いときだけ読み、Copilotは対象ファイルに最も近い1つだけを読みます。
+  どちらも再現しないため、`AGENTS.md`はCodexとCursorの分だけ数えます
 - エージェントのバージョンやプラットフォーム差による挙動の違い
 - リポジトリルート以外の`.gitignore`。検出ファイルの除外にはルートの
-  `.gitignore`のみを適用します
+  `.gitignore`と`.git/info/exclude`のみを適用します。独自の`.git`を持つ
+  ディレクトリ(worktree・submodule)は別のリポジトリとして読み飛ばします
 - ワークスペース配下の`package.json` scripts。KASANE003は常にルートの
   `package.json`と照合するため、ワークスペース内でのみ有効なコマンドを
   「存在しない」と報告します

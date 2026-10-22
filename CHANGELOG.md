@@ -56,6 +56,24 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   horizontal rule lost the text up to the next `---`.
 - `explain` dropped a duplicate-instruction diagnostic when only the other
   copy was in the agent's context.
+- A Cursor rule with `alwaysApply: true` and `globs` was scoped to its
+  globs; Cursor ignores them for an always-applied rule.
+- Cursor `globs` such as `src/**/*.{ts,tsx}` were split at the comma
+  inside the braces.
+- `.github/copilot-instructions.md` and `.claude/CLAUDE.md` were scoped
+  to the `.github` or `.claude` directory itself, so `explain --path` and
+  `diff --path` left them out for every file in the repository.
+
+### Changed
+
+- `AGENTS.md` is now part of Cursor's context as well as Codex's, so
+  `diff --agents codex,cursor` lists its instructions as common.
+- Cursor rules that Cursor does not load on its own are left out of
+  `explain` and `diff`: a `.mdc` rule with no `alwaysApply`, `globs` or
+  `description` (applied only when @-mentioned), and plain `.md` files in
+  `.cursor/rules`. `inspect` still checks them.
+- `.github/copilot-instructions.md` below the repository root is no
+  longer part of Copilot's context; Copilot reads only the root one.
 
 ## [0.2.0] - 2026-07-28
 

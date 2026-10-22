@@ -163,15 +163,21 @@ are resolved accordingly).
 | Agent          | File(s)                                                             |
 | -------------- | ---------------------------------------------------------------------- |
 | OpenAI Codex   | `AGENTS.md`                                                          |
-| Claude Code    | `CLAUDE.md`, `CLAUDE.local.md`                                       |
-| Cursor         | `.cursor/rules/**/*.md`, `.cursor/rules/**/*.mdc`, `.cursorrules`    |
+| Claude Code    | `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`                  |
+| Cursor         | `.cursor/rules/**/*.mdc`, `.cursorrules`, `AGENTS.md`                |
 | Gemini CLI     | `GEMINI.md`                                                          |
-| GitHub Copilot | `.github/copilot-instructions.md`                                    |
+| GitHub Copilot | `.github/copilot-instructions.md` (repository root only)             |
 | MCP servers    | `.mcp.json`, `mcp.json`, `.cursor/mcp.json`, `.claude/mcp.json` (detected only, not parsed for instructions) |
 
-Cursor rules are resolved from a `.cursor/rules` directory at any depth,
-and `globs` is accepted as a list, a single string, or a comma-separated
-string. A rule with no `globs` is scoped to the subtree that owns it.
+Cursor rules are resolved from a `.cursor/rules` directory at any depth
+and follow Cursor's rule types. An `alwaysApply: true` rule reaches the
+whole subtree that owns it, and its `globs` are ignored. Otherwise `globs`
+scopes the rule to matching files; it is accepted as a list, a single
+string, or a comma-separated string (commas inside `{ts,tsx}` are kept). A
+rule with only a `description` is treated as reaching its subtree. A rule
+with none of these is applied only when @-mentioned, and a plain `.md` file
+in `.cursor/rules` is not a rule: both are left out of `explain` and `diff`,
+but `inspect` still checks them.
 
 ### Known limitations (not reproduced in v0.2.0)
 
@@ -182,6 +188,10 @@ analysis**. The following are intentionally out of scope for now:
   (an Agent-Requested rule is reported as reaching its whole subtree,
   which is an upper bound, not a prediction)
 - In-agent-only reference syntax, such as Claude Code's `@path` imports
+- `AGENTS.md` for Claude Code and Copilot. Claude Code reads it only when
+  there is no `CLAUDE.md`, and Copilot reads only the one nearest the
+  target file. Neither rule is modeled, so `AGENTS.md` is counted for
+  Codex and Cursor only
 - Behavior differences caused by agent version or platform
 - `.gitignore` files below the repository root — only the root one and
   `.git/info/exclude` are applied when filtering discovered files.

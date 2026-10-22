@@ -30,15 +30,6 @@ import type {
   SourceType,
 } from "./types.js";
 
-const AGENTS_BY_SOURCE_TYPE: Record<SourceType, AgentType[]> = {
-  agents: ["codex"],
-  claude: ["claude"],
-  cursor: ["cursor"],
-  gemini: ["gemini"],
-  copilot: ["copilot"],
-  mcp: [],
-};
-
 const RULES: DiagnosticRule[] = [
   duplicateInstructionRule,
   brokenReferenceRule,
@@ -68,6 +59,33 @@ function cursorBaseDir(relativePath: string): string {
 }
 
 /**
+ * Splits on commas that separate patterns, not the ones inside `{ts,tsx}`,
+ * `@(a|b,c)` or `[,]`.
+ */
+function splitTopLevelCommas(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "\\") {
+      index += 1;
+    } else if (char === "{" || char === "(" || char === "[") {
+      depth += 1;
+    } else if ((char === "}" || char === ")" || char === "]") && depth > 0) {
+      depth -= 1;
+    } else if (char === "," && depth === 0) {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+
+  return parts;
+}
+
+/**
  * Cursor's `globs` frontmatter is written as a list, as a single string, or
  * as a comma-separated string. Each pattern is kept as its own entry so
  * extglob syntax such as `@(a|b)` is never split apart.
@@ -78,13 +96,77 @@ function normalizeGlobs(value: unknown): string[] {
 
   for (const entry of raw) {
     if (typeof entry !== "string") continue;
-    for (const part of entry.split(",")) {
+    for (const part of splitTopLevelCommas(entry)) {
       const trimmed = part.trim();
       if (trimmed.length > 0) patterns.push(trimmed);
     }
   }
 
   return patterns;
+}
+
+function isAlwaysApplied(frontmatter: Record<string, unknown>): boolean {
+  const value = frontmatter.alwaysApply;
+  return value === true || (typeof value === "string" && value.trim().toLowerCase() === "true");
+}
+
+function hasDescription(frontmatter: Record<string, unknown>): boolean {
+  const value = frontmatter.description;
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isInCursorRulesDir(relativePath: string): boolean {
+  return (
+    relativePath.startsWith(".cursor/rules/") ||
+    relativePath.includes("/.cursor/rules/")
+  );
+}
+
+/**
+ * Whether Cursor loads a rule without being asked to. Inside `.cursor/rules`
+ * only `.mdc` files are rules, and one with no `alwaysApply`, `globs` or
+ * `description` is applied only when @-mentioned. `.cursorrules` is always
+ * applied.
+ */
+function isLoadedCursorRule(
+  relativePath: string,
+  frontmatter: Record<string, unknown>,
+): boolean {
+  if (!isInCursorRulesDir(relativePath)) return true;
+  if (!relativePath.endsWith(".mdc")) return false;
+  return (
+    isAlwaysApplied(frontmatter) ||
+    normalizeGlobs(frontmatter.globs).length > 0 ||
+    hasDescription(frontmatter)
+  );
+}
+
+/**
+ * The agents that load a config file on their own. AGENTS.md is merged with
+ * every AGENTS.md above the target by Codex and Cursor. Claude Code reads it
+ * only when there is no CLAUDE.md, and Copilot reads only the nearest one,
+ * so neither is modeled.
+ */
+function agentsFor(
+  relativePath: string,
+  sourceType: SourceType,
+  frontmatter: Record<string, unknown>,
+): AgentType[] {
+  switch (sourceType) {
+    case "agents":
+      return ["codex", "cursor"];
+    case "claude":
+      return ["claude"];
+    case "gemini":
+      return ["gemini"];
+    case "copilot":
+      // Only the repository's own `.github/copilot-instructions.md` is read.
+      return relativePath === ".github/copilot-instructions.md" ? ["copilot"] : [];
+    case "cursor":
+      return isLoadedCursorRule(relativePath, frontmatter) ? ["cursor"] : [];
+    case "mcp":
+      return [];
+  }
 }
 
 function scopeToBase(base: string): ContextInstruction["scope"] {
@@ -100,6 +182,8 @@ function computeScope(
 ): ContextInstruction["scope"] {
   if (sourceType === "cursor") {
     const base = cursorBaseDir(relativePath);
+    // `alwaysApply: true` includes the rule everywhere; its globs are ignored.
+    if (isAlwaysApplied(frontmatter)) return scopeToBase(base);
     const globs = normalizeGlobs(frontmatter.globs);
 
     if (globs.length > 0) {
@@ -117,7 +201,16 @@ function computeScope(
     return scopeToBase(base);
   }
 
+  // `.github/copilot-instructions.md` and `.claude/CLAUDE.md` belong to the
+  // directory holding `.github` or `.claude`, not to that directory itself.
   const dir = path.posix.dirname(relativePath);
+  const dirName = path.posix.basename(dir);
+  if (
+    (sourceType === "copilot" && dirName === ".github") ||
+    (sourceType === "claude" && dirName === ".claude")
+  ) {
+    return scopeToBase(path.posix.dirname(dir));
+  }
   return scopeToBase(dir);
 }
 
@@ -164,10 +257,16 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
   discovered.forEach((file, fileIndex) => {
     const content = contents[fileIndex];
     const estimatedTokens = estimateTokens(content);
-    const agents = AGENTS_BY_SOURCE_TYPE[file.sourceType];
+    const parsed = isMarkdownSource(file.sourceType)
+      ? parseMarkdown(content)
+      : undefined;
+    const agents = agentsFor(
+      file.relativePath,
+      file.sourceType,
+      parsed?.frontmatter ?? {},
+    );
 
-    if (isMarkdownSource(file.sourceType)) {
-      const parsed = parseMarkdown(content);
+    if (parsed) {
       const scope = computeScope(
         file.relativePath,
         file.sourceType,
