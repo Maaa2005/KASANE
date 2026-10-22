@@ -91,6 +91,18 @@ export interface AnalysisContext {
   packageJsonScripts: string[] | null;
   /** Names from dependencies and devDependencies of the root package.json. */
   packageJsonDependencies?: string[];
+  /**
+   * The scripts and dependencies a config file's commands run against, keyed
+   * by its relative path: those of the nearest package.json at or above the
+   * directory it belongs to, merged with every package.json above that. Null
+   * when there is none. A path missing from the map uses the root fields.
+   */
+  packageScripts?: ReadonlyMap<string, PackageScripts | null>;
+}
+
+export interface PackageScripts {
+  scripts: string[];
+  dependencies: string[];
 }
 
 export interface DiagnosticRule {

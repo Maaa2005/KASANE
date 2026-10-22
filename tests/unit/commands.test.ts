@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractMentionedManagers } from "../../src/utils/commands.js";
+import {
+  extractMentionedManagers,
+  extractPackageManagerCommands,
+  isDependencyBinary,
+} from "../../src/utils/commands.js";
 
 describe("extractMentionedManagers", () => {
   it("returns the manager an instruction tells the agent to use", () => {
@@ -20,5 +24,88 @@ describe("extractMentionedManagers", () => {
 
   it("returns nothing when every mention is negated", () => {
     expect(extractMentionedManagers("Never use yarn in this repo.")).toEqual([]);
+  });
+});
+
+const scripts = (text: string) =>
+  extractPackageManagerCommands(text).map((command) => command.script);
+
+describe("extractPackageManagerCommands", () => {
+  it.each([
+    "Run `pnpm run --filter web build`.",
+    "Run `pnpm -F web build`.",
+    "Run `pnpm --dir web dev`.",
+    "Run `npm run build --workspace web`.",
+    "Run `npm run lint --if-present`.",
+    "Run `cd web && pnpm build`.",
+  ])("skips a command that runs another package's script: %j", (text) => {
+    expect(scripts(text)).toEqual([]);
+  });
+
+  it.each([
+    "Run `bun run index.ts`.",
+    "Run `bun run ./scripts/seed`.",
+  ])("skips a file run with bun: %j", (text) => {
+    expect(scripts(text)).toEqual([]);
+  });
+
+  it.each([
+    "Use npm run for scripts.",
+    "Prefer npm run to npx.",
+    "Run `npm run <script>`.",
+  ])("does not read a word about the command as a script: %j", (text) => {
+    expect(scripts(text)).toEqual([]);
+  });
+
+  it("drops punctuation that ends the sentence", () => {
+    expect(scripts("Before committing, run npm run build.")).toEqual(["build"]);
+  });
+
+  it("reads the script after a flag such as --silent", () => {
+    expect(scripts("Run `npm --silent run missing`.")).toEqual(["missing"]);
+  });
+
+  it("reads npm's test and start aliases but not restart", () => {
+    expect(scripts("Run `npm test`, `npm t` and `npm start`; never `npm restart`.")).toEqual([
+      "test",
+      "test",
+      "start",
+    ]);
+  });
+
+  it("reads every command joined by a shell operator", () => {
+    expect(scripts("Run `pnpm install && pnpm lint; pnpm test`.")).toEqual([
+      "lint",
+      "test",
+    ]);
+  });
+
+  it("marks which managers fall back to a dependency's binary", () => {
+    const runsBinaries = extractPackageManagerCommands(
+      "Run `npm run a`, `pnpm run b`, `pnpm c`, `yarn d`, `yarn run e` and `bun run f`.",
+    ).map((command) => [command.script, command.runsBinaries]);
+
+    expect(runsBinaries).toEqual([
+      ["a", false],
+      ["b", false],
+      ["c", true],
+      ["d", true],
+      ["e", true],
+      ["f", true],
+    ]);
+  });
+});
+
+describe("isDependencyBinary", () => {
+  it("matches a binary named after its package", () => {
+    expect(isDependencyBinary("eslint", new Set(["eslint"]))).toBe(true);
+  });
+
+  it("matches a binary installed by a differently named package", () => {
+    expect(isDependencyBinary("tsc", new Set(["typescript"]))).toBe(true);
+  });
+
+  it("does not match a word that is only part of a package name", () => {
+    expect(isDependencyBinary("test", new Set(["@playwright/test"]))).toBe(false);
   });
 });

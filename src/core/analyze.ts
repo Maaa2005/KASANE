@@ -26,6 +26,7 @@ import type {
   Diagnostic,
   DiagnosticRule,
   InspectResult,
+  PackageScripts,
   Severity,
   SourceType,
 } from "./types.js";
@@ -175,13 +176,32 @@ function scopeToBase(base: string): ContextInstruction["scope"] {
     : { type: "directory", patterns: [base] };
 }
 
+/**
+ * The directory a config file belongs to. `.github/copilot-instructions.md`
+ * and `.claude/CLAUDE.md` belong to the directory holding `.github` or
+ * `.claude`, not to that directory itself, and a Cursor rule to the parent of
+ * its `.cursor` directory.
+ */
+function ownerDir(relativePath: string, sourceType: SourceType): string {
+  if (sourceType === "cursor") return cursorBaseDir(relativePath);
+  const dir = path.posix.dirname(relativePath);
+  const dirName = path.posix.basename(dir);
+  if (
+    (sourceType === "copilot" && dirName === ".github") ||
+    (sourceType === "claude" && dirName === ".claude")
+  ) {
+    return path.posix.dirname(dir);
+  }
+  return dir;
+}
+
 function computeScope(
   relativePath: string,
   sourceType: SourceType,
   frontmatter: Record<string, unknown>,
 ): ContextInstruction["scope"] {
+  const base = ownerDir(relativePath, sourceType);
   if (sourceType === "cursor") {
-    const base = cursorBaseDir(relativePath);
     // `alwaysApply: true` includes the rule everywhere; its globs are ignored.
     if (isAlwaysApplied(frontmatter)) return scopeToBase(base);
     const globs = normalizeGlobs(frontmatter.globs);
@@ -201,29 +221,17 @@ function computeScope(
     return scopeToBase(base);
   }
 
-  // `.github/copilot-instructions.md` and `.claude/CLAUDE.md` belong to the
-  // directory holding `.github` or `.claude`, not to that directory itself.
-  const dir = path.posix.dirname(relativePath);
-  const dirName = path.posix.basename(dir);
-  if (
-    (sourceType === "copilot" && dirName === ".github") ||
-    (sourceType === "claude" && dirName === ".claude")
-  ) {
-    return scopeToBase(path.posix.dirname(dir));
-  }
-  return scopeToBase(dir);
+  return scopeToBase(base);
 }
 
-interface PackageJsonInfo {
-  scripts: string[];
-  dependencies: string[];
-}
-
-async function readPackageJson(root: string): Promise<PackageJsonInfo | null> {
+async function readPackageJson(
+  root: string,
+  dir = ".",
+): Promise<PackageScripts | null> {
   try {
     // Same guard as discovery: a symlink out of the repository, or to a
     // device, is not this repository's package.json.
-    const file = resolveFileInside(root, "package.json");
+    const file = resolveFileInside(root, path.posix.join(dir, "package.json"));
     if (!file) return null;
     const raw = await fs.readFile(file, "utf8");
     const parsed = JSON.parse(raw) as {
@@ -231,8 +239,20 @@ async function readPackageJson(root: string): Promise<PackageJsonInfo | null> {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
+    const scripts =
+      parsed.scripts !== null && typeof parsed.scripts === "object"
+        ? Object.keys(parsed.scripts)
+        : [];
+    // npm and pnpm run `node server.js` for `start` when there is no start
+    // script and a server.js sits next to package.json.
+    if (
+      !scripts.includes("start") &&
+      resolveFileInside(root, path.posix.join(dir, "server.js"))
+    ) {
+      scripts.push("start");
+    }
     return {
-      scripts: Object.keys(parsed.scripts ?? {}),
+      scripts,
       dependencies: [
         ...Object.keys(parsed.dependencies ?? {}),
         ...Object.keys(parsed.devDependencies ?? {}),
@@ -241,6 +261,40 @@ async function readPackageJson(root: string): Promise<PackageJsonInfo | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The scripts and dependencies a config file in `dir` can reach: its own
+ * package.json and every one above it. An agent may run a command from the
+ * package directory or from the repository root, so a script defined in
+ * either is not reported as missing.
+ */
+async function packageScriptsFor(
+  root: string,
+  dir: string,
+  cache: Map<string, Promise<PackageScripts | null>>,
+): Promise<PackageScripts | null> {
+  const chain: Promise<PackageScripts | null>[] = [];
+  let current = dir;
+  for (;;) {
+    let entry = cache.get(current);
+    if (!entry) {
+      entry = readPackageJson(root, current);
+      cache.set(current, entry);
+    }
+    chain.push(entry);
+    if (current === ".") break;
+    current = path.posix.dirname(current);
+  }
+
+  const found = (await Promise.all(chain)).filter(
+    (info): info is PackageScripts => info !== null,
+  );
+  if (found.length === 0) return null;
+  return {
+    scripts: Array.from(new Set(found.flatMap((info) => info.scripts))),
+    dependencies: Array.from(new Set(found.flatMap((info) => info.dependencies))),
+  };
 }
 
 export async function buildAnalysisContext(root: string): Promise<AnalysisContext> {
@@ -324,7 +378,20 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     0,
   );
 
-  const packageJson = await readPackageJson(absoluteRoot);
+  const packageJsonCache = new Map<string, Promise<PackageScripts | null>>();
+  const packageScripts = new Map<string, PackageScripts | null>();
+  for (const file of discovered) {
+    if (!isMarkdownSource(file.sourceType)) continue;
+    packageScripts.set(
+      file.relativePath,
+      await packageScriptsFor(
+        absoluteRoot,
+        ownerDir(file.relativePath, file.sourceType),
+        packageJsonCache,
+      ),
+    );
+  }
+  const packageJson = await packageScriptsFor(absoluteRoot, ".", packageJsonCache);
 
   return {
     repository: absoluteRoot,
@@ -333,6 +400,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     totalEstimatedTokens,
     packageJsonScripts: packageJson?.scripts ?? null,
     packageJsonDependencies: packageJson?.dependencies ?? [],
+    packageScripts,
   };
 }
 

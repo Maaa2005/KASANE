@@ -63,6 +63,16 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 - `.github/copilot-instructions.md` and `.claude/CLAUDE.md` were scoped
   to the `.github` or `.claude` directory itself, so `explain --path` and
   `diff --path` left them out for every file in the repository.
+- KASANE003 reported scripts that do exist or that are not scripts at
+  all. It read flags as script names (`pnpm -F web build` as `-F`), kept
+  sentence punctuation (`build.`), flagged a file run with `bun run`, a
+  dependency's binary run with `pnpm tsc` or `yarn jest`, prose such as
+  "use npm run for scripts", and `npm start` when a `server.js` stands in
+  for the start script. A config file in a monorepo package is now
+  checked against that package's `package.json` and the ones above it,
+  and commands that target another package (`--filter`, `--workspace`,
+  `--dir`, `cd web && ...`) or opt out with `--if-present` are skipped.
+  It also now reads `npm test`, `npm t` and `npm --silent run x`.
 
 ### Changed
 
