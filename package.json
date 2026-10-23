@@ -1,6 +1,6 @@
 {
   "name": "kasane-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Lint, explain, and compare context for AI coding agents.",
   "type": "module",
   "license": "MIT",

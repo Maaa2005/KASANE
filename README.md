@@ -187,7 +187,7 @@ with none of these is applied only when @-mentioned, and a plain `.md` file
 in `.cursor/rules` is not a rule: both are left out of `explain` and `diff`,
 but `inspect` still checks them.
 
-### Known limitations (not reproduced in v0.2.0)
+### Known limitations (not reproduced in v0.3.0)
 
 KASANE only reconstructs context that can be resolved by **static
 analysis**. The following are intentionally out of scope for now:
