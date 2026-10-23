@@ -8,6 +8,13 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-23
+
+### Changed
+
+- Releases are now published through npm trusted publishing (OIDC) instead of a
+  stored npm token. No change to the CLI itself.
+
 ## [0.3.0] - 2026-10-23
 
 ### Security
@@ -201,7 +208,8 @@ Never published to npm.
   conflicts, context size warnings, absolute paths, and possible secrets
   (masked in output)
 
-[Unreleased]: https://github.com/Maaa2005/KASANE/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Maaa2005/KASANE/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Maaa2005/KASANE/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Maaa2005/KASANE/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Maaa2005/KASANE/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Maaa2005/KASANE/releases/tag/v0.1.0

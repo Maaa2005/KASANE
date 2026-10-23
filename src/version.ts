@@ -6,4 +6,4 @@
  * build if these two ever drift, and .github/workflows/publish.yml refuses to
  * publish when the release tag does not match package.json.
  */
-export const KASANE_VERSION = "0.3.0";
+export const KASANE_VERSION = "0.3.1";
