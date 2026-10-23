@@ -95,6 +95,12 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   with the lockfile as an error.
 - KASANE002 did not check reference-style links (`[guide][g]` with
   `[g]: docs/guide.md` elsewhere in the file), only inline ones.
+- KASANE001 and `diff` merged instructions that differed only in a `*`,
+  `_`, `#` or `>` (`__init__.py` and `init.py`, `#12` and `12`), because
+  those characters were dropped before comparing. They are now kept, except
+  for emphasis markers Markdown leaves unparsed in Japanese text
+  (`**「禁止」**`). Full-width characters and Japanese trailing punctuation
+  are now normalized, so `テストを書く。` matches `テストを書く`.
 
 ### Changed
 

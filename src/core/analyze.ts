@@ -371,8 +371,8 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
           agents,
           scope,
           content: instruction.content,
-          // Normalizing lowercases and strips `_`, which turns `AKIA…` and
-          // `ghp_…` into text no secret pattern recognizes. Mask first.
+          // Normalizing lowercases, which turns `AKIA…` into text no secret
+          // pattern recognizes. Mask first.
           normalizedContent: normalizeInstruction(
             redactSecrets(instruction.content),
           ),

@@ -39,7 +39,7 @@ Detected:
 
 Context:
   6 files
-  143 estimated tokens
+  146 estimated tokens
   10 instructions
 
 Issues:
