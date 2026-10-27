@@ -51,7 +51,7 @@
     "fast-glob": "^3.3.2",
     "ignore": "^5.3.1",
     "js-tiktoken": "^1.0.15",
-    "js-yaml": "^4.3.0",
+    "js-yaml": "^4.3.2",
     "minimatch": "^10.2.5",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
