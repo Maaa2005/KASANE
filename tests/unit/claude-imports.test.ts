@@ -256,6 +256,18 @@ describe("Claude Code @path imports", () => {
     ]);
   });
 
+  it("blocks git metadata and dependencies in any letter case", async () => {
+    // Windows and macOS file systems reach `.git/` through `.GIT/` as well.
+    const repo = makeRepo({
+      ".GIT/notes.txt": "- From git metadata.\n",
+      "NODE_MODULES/pkg/README.md": "- From a dependency.\n",
+      "CLAUDE.md": "@.GIT/notes.txt\n\n@NODE_MODULES/pkg/README.md\n",
+    });
+
+    const { instructions } = await claudeContext(repo);
+    expect(instructions).toEqual(["@.GIT/notes.txt", "@NODE_MODULES/pkg/README.md"]);
+  });
+
   it("marks an imported file that is not a config file as an import", async () => {
     const repo = makeRepo({
       "docs/git.md": "- Squash before merging.\n",

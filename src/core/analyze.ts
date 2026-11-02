@@ -309,7 +309,13 @@ function resolveImport(
   }
   const relativePath = relative.split(path.sep).join("/");
   const segments = relativePath.split("/");
-  if (segments.some((segment) => segment === ".git" || segment === "node_modules")) {
+  // Lowercased: on Windows and macOS `.GIT/` is the same directory.
+  if (
+    segments.some((segment) => {
+      const lower = segment.toLowerCase();
+      return lower === ".git" || lower === "node_modules";
+    })
+  ) {
     return null;
   }
   const name = segments[segments.length - 1];
@@ -429,6 +435,19 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
   const instructions: ContextInstruction[] = [];
   const parsedFiles = new Map<string, ParsedFile>();
 
+  // Each resolution touches the file system, and a file can name the same
+  // import on every line.
+  const resolvedImports = new Map<string, string | null>();
+  const followImport = (fromFile: string, importPath: string): string | null => {
+    const key = `${path.posix.dirname(fromFile)}\0${importPath}`;
+    let resolved = resolvedImports.get(key);
+    if (resolved === undefined) {
+      resolved = resolveImport(absoluteRoot, fromFile, importPath);
+      resolvedImports.set(key, resolved);
+    }
+    return resolved;
+  };
+
   // An instruction made only of imports KASANE follows is stood in for by
   // the files it imports.
   const replacedByImports = (
@@ -436,9 +455,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     instruction: MarkdownInstruction,
   ): Partial<ContextInstruction> =>
     instruction.importsOnly &&
-    instruction.imports.every(
-      (importPath) => resolveImport(absoluteRoot, fromFile, importPath) !== null,
-    )
+    instruction.imports.every((importPath) => followImport(fromFile, importPath) !== null)
       ? { importsOnly: true }
       : {};
 
@@ -528,7 +545,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
       hop: number,
     ): Promise<void> => {
       for (const importPath of imports) {
-        const target = resolveImport(absoluteRoot, fromFile, importPath);
+        const target = followImport(fromFile, importPath);
         if (target === null || loaded.has(target)) continue;
         loaded.add(target);
         const file = await loadImported(target);
