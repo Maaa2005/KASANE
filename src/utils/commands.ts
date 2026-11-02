@@ -351,6 +351,21 @@ function extractFromSegment(segment: string, inCode: boolean): DetectedCommand[]
 }
 
 /**
+ * How much of each line is scanned. Command extraction re-splits the rest
+ * of a segment at every manager name, which is quadratic on a very long
+ * line; a real command is nowhere near this long.
+ */
+const MAX_SCANNED_LINE_LENGTH = 4000;
+
+function capLines(text: string): string {
+  if (text.length <= MAX_SCANNED_LINE_LENGTH) return text;
+  return text
+    .split("\n")
+    .map((line) => line.slice(0, MAX_SCANNED_LINE_LENGTH))
+    .join("\n");
+}
+
+/**
  * Extracts npm/pnpm/yarn/bun script invocations from instruction text.
  * Used by KASANE003.
  *
@@ -361,8 +376,9 @@ function extractFromSegment(segment: string, inCode: boolean): DetectedCommand[]
  * is cheaper than an error for a script that exists.
  */
 export function extractPackageManagerCommands(text: string): DetectedCommand[] {
-  const cd = CHANGE_DIRECTORY_PATTERN.exec(text);
-  const checked = cd ? text.slice(0, cd.index) : text;
+  const capped = capLines(text);
+  const cd = CHANGE_DIRECTORY_PATTERN.exec(capped);
+  const checked = cd ? capped.slice(0, cd.index) : capped;
 
   const codeSpans = Array.from(checked.matchAll(CODE_SPAN_PATTERN), (m) => m[1]);
   const prose = checked.replace(CODE_SPAN_PATTERN, "\n");
@@ -444,11 +460,35 @@ const NEGATED_MANAGER_PATTERNS = [
 ];
 
 /**
+ * `npm` subcommands that exist only on npm (registry and package metadata
+ * work), which pnpm and yarn repositories run through npm as well.
+ */
+const NPM_ONLY_COMMAND_PATTERN =
+  /\bnpm\s+(?:publish|view|audit|pack|version|login|whoami|dist-tag|deprecate)\b/g;
+
+/**
+ * `npm install -g pnpm`: npm is only the bootstrap for another tool, and the
+ * packages it installs (often pnpm or yarn itself) are not the repository's
+ * manager either.
+ */
+const NPM_GLOBAL_INSTALL_PATTERN =
+  /\bnpm\s+(?:i|install|add)\b(?=[^\n;&|`]*\s(?:-g|--global)\b)[^\n;&|`]*/g;
+
+/**
+ * "Requires Node 20 and npm 10": a version requirement for the npm that
+ * ships with Node, not an instruction to run npm. Only the `npm` is
+ * dropped, so other managers in the sentence still count.
+ */
+const NPM_VERSION_REQUIREMENT_PATTERN =
+  /(\b(?:requires?|required|needs?|node(?:\.js)?|engines?|supports?)\b[^.;:!?\n]{0,60}?)\bnpm(?=\s*(?:>=?|\^|~|v)?\s*\d)/gi;
+
+/**
  * "npm" as the registry or the ecosystem rather than the CLI: "publish to
  * npm", "an npm package", "npm scripts". These say nothing about which
  * package manager to run.
  */
 const GENERIC_NPM_PATTERNS = [
+  NPM_GLOBAL_INSTALL_PATTERN,
   /\bnpm\s+(?:registry|packages?|modules?|scripts?|org(?:anization)?|account|scope|ecosystem|page|badge)\b/g,
   /\b(?:on|from)\s+(?:the\s+)?npm\b(?!\s+(?:install|i|ci|run|test|exec|start)\b)/g,
   // "Publish the package to npm", but not "switch to npm".
@@ -458,11 +498,23 @@ const GENERIC_NPM_PATTERNS = [
 /**
  * Extracts package manager names the text tells an agent to use, ignoring
  * ones it explicitly tells the agent not to use. Used by KASANE004.
+ *
+ * Pass the manager the repository uses as `expected`. When it is not npm,
+ * npm-only subcommands (`npm publish`, `npm view`, ...) are not counted as
+ * a mention: no other manager has them, so running them says nothing about
+ * how to install or run scripts.
  */
-export function extractMentionedManagers(text: string): PackageManager[] {
-  const positive = [...NEGATED_MANAGER_PATTERNS, ...GENERIC_NPM_PATTERNS].reduce(
+export function extractMentionedManagers(
+  text: string,
+  expected?: PackageManager,
+): PackageManager[] {
+  const patterns = [...NEGATED_MANAGER_PATTERNS, ...GENERIC_NPM_PATTERNS];
+  if (expected !== undefined && expected !== "npm") {
+    patterns.push(NPM_ONLY_COMMAND_PATTERN);
+  }
+  const positive = patterns.reduce(
     (remaining, pattern) => remaining.replace(pattern, " "),
-    text,
+    text.replace(NPM_VERSION_REQUIREMENT_PATTERN, "$1 "),
   );
   const matches = positive.match(MANAGER_MENTION_PATTERN) ?? [];
   return Array.from(new Set(matches)) as PackageManager[];

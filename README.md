@@ -166,6 +166,20 @@ invalid arguments (unknown option, bad `--format`, `--root` that is not a
 directory, `--path` outside the repository), `3` the analysis failed,
 `4` unexpected error.
 
+## Rules
+
+Every diagnostic carries one of these IDs.
+
+| ID | Severity | What it reports |
+| --- | --- | --- |
+| `KASANE001` | warning | The same instruction appears in more than one context file |
+| `KASANE002` | error | A referenced file does not exist |
+| `KASANE003` | error | An instruction runs a `package.json` script that does not exist |
+| `KASANE004` | warning / error | An instruction names a different package manager than the lockfile or `packageManager` field; also conflicting lockfiles, or a declaration that disagrees with the lockfile |
+| `KASANE005` | warning | A context file (over 4,000 estimated tokens) or the whole context (over 8,000) is large |
+| `KASANE006` | warning | A machine-specific absolute path that will not resolve on other machines |
+| `KASANE007` | error | A string that looks like an API key, token or password (always masked in output) |
+
 ## Supported agents / config files
 
 | Agent          | File(s)                                                             |
@@ -187,11 +201,15 @@ with none of these is applied only when @-mentioned, and a plain `.md` file
 in `.cursor/rules` is not a rule: both are left out of `explain` and `diff`,
 but `inspect` still checks them.
 
-### Known limitations (not reproduced in v0.3.0)
+### Known limitations (not reproduced in v0.3.1)
 
 KASANE only reconstructs context that can be resolved by **static
 analysis**. The following are intentionally out of scope for now:
 
+- Commands inside fenced code blocks are **not checked** by the command
+  rules (KASANE003 and KASANE004) yet. They read inline code spans and
+  prose only, so a stale `npm run build` in a fenced block goes unreported.
+  This is a current limitation. KASANE007 (secrets) does scan fenced blocks
 - Whether an agent actually loads a description-matched rule at runtime
   (an Agent-Requested rule is reported as reaching its whole subtree,
   which is an upper bound, not a prediction)
@@ -246,21 +264,6 @@ formats are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) and our
 ## Security
 
 See [SECURITY.md](./SECURITY.md) for how to report a vulnerability.
-
-## Release checklist
-
-Kept here as a record of how v0.2.0 was released. Only step 7 is still open.
-
-1. Done: pushed to https://github.com/Maaa2005/KASANE (default branch `main`)
-2. Done: `kasane` was already taken on npm, so the package is published as
-   `kasane-cli` (`package.json` `name`), with the binary still named `kasane`
-3. Done: `docs/make-demo.sh` records `docs/demo.gif`, embedded at the top of
-   this README
-4. Done: "Why KASANE" carries a comparison against agentlinter,
-   ai-context-kit and cursor-doctor
-5. Done: published as `kasane-cli@0.2.0` by tag-pushing `v0.2.0`
-6. Done: https://github.com/Maaa2005/KASANE/releases/tag/v0.2.0
-7. Post the initial announcement per the launch plan (計画書.md §26)
 
 ## Changelog
 

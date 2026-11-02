@@ -1,10 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { AnalysisContext, Diagnostic, DiagnosticRule } from "../core/types.js";
-import { LOCKFILE_MANAGERS, extractMentionedManagers } from "../utils/commands.js";
+import {
+  LOCKFILE_MANAGERS,
+  extractMentionedManagers,
+  type PackageManager,
+} from "../utils/commands.js";
 
-function detectLockfileManagers(repository: string): string[] {
-  const found: string[] = [];
+function detectLockfileManagers(repository: string): PackageManager[] {
+  const found: PackageManager[] = [];
   for (const [lockfile, manager] of Object.entries(LOCKFILE_MANAGERS)) {
     if (fs.existsSync(path.join(repository, lockfile))) {
       found.push(manager);
@@ -15,17 +19,18 @@ function detectLockfileManagers(repository: string): string[] {
 
 const KNOWN_MANAGERS = new Set<string>(Object.values(LOCKFILE_MANAGERS));
 
+const isKnownManager = (value: string | undefined): value is PackageManager =>
+  value !== undefined && KNOWN_MANAGERS.has(value);
+
 export const packageManagerConflictRule: DiagnosticRule = {
   id: "KASANE004",
 
   async run(context: AnalysisContext): Promise<Diagnostic[]> {
     const diagnostics: Diagnostic[] = [];
     const lockfileManagers = detectLockfileManagers(context.repository);
-    const declared =
-      context.declaredPackageManager !== undefined &&
-      KNOWN_MANAGERS.has(context.declaredPackageManager)
-        ? context.declaredPackageManager
-        : undefined;
+    const declared = isKnownManager(context.declaredPackageManager)
+      ? context.declaredPackageManager
+      : undefined;
 
     if (lockfileManagers.length > 1) {
       diagnostics.push({
@@ -66,7 +71,7 @@ export const packageManagerConflictRule: DiagnosticRule = {
 
     const reported = new Set<string>();
     for (const instruction of context.instructions) {
-      for (const manager of extractMentionedManagers(instruction.content)) {
+      for (const manager of extractMentionedManagers(instruction.content, expected)) {
         if (manager === expected) continue;
         const key = `${instruction.source.relativePath}:${manager}`;
         if (reported.has(key)) continue;

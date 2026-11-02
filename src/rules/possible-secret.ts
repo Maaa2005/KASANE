@@ -1,5 +1,5 @@
 import type { AnalysisContext, Diagnostic, DiagnosticRule } from "../core/types.js";
-import { findPossibleSecretsInContent, maskSecret } from "../utils/secrets.js";
+import { findPossibleSecretsInContent, maskSecretMatch } from "../utils/secrets.js";
 
 export const possibleSecretRule: DiagnosticRule = {
   id: "KASANE007",
@@ -23,7 +23,7 @@ export const possibleSecretRule: DiagnosticRule = {
           ruleId: "KASANE007",
           severity: "error",
           title: "Possible secret in context file",
-          message: `A string matching the "${secret.pattern}" pattern was found: ${maskSecret(secret.value)}`,
+          message: `A string matching the "${secret.pattern}" pattern was found: ${maskSecretMatch(secret)}`,
           source: {
             filePath: source.filePath,
             relativePath: source.relativePath,

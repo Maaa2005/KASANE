@@ -8,6 +8,36 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ## [Unreleased]
 
+### Security
+
+- Secret detection and masking now cover credentials in URLs
+  (`scheme://user:password@host`, where only the password is masked; a URL
+  with a user name and no password is not flagged), JWTs (`eyJ...`), Notion
+  `ntn_` tokens and Supabase `sbp_` tokens. Everything KASANE007 reports is
+  masked in `explain`, `diff` and `inspect`, including `--include-content`.
+- A secret contained in a larger match (a JWT after `Bearer`) is reported
+  once, as the outer match.
+
+### Fixed
+
+- KASANE004 no longer warns, in a pnpm or yarn repository, about npm-only
+  subcommands (`npm publish`, `view`, `audit`, `pack`, `version`, `login`,
+  `whoami`, `dist-tag`, `deprecate`), about `npm install -g ...` /
+  `npm i -g ...`, or about prose such as "Requires Node 20 and npm 10".
+- Command extraction was quadratic on very long lines (a 120 KB line of
+  repeated `npm ` took about 40 seconds). Only the first 4000 characters of
+  each line are scanned now.
+
+### Changed
+
+- Updated `minimatch` to ^11. Both call sites (`--path` and Cursor `globs`
+  matching) behave as before.
+- Removed `zod` from dependencies; it was never imported.
+- README: states that commands inside fenced code blocks are not checked by
+  the command rules yet, lists the rule IDs KASANE001 to KASANE007, and no
+  longer carries the internal release checklist (moved to `docs/releasing.md`).
+- SECURITY.md: the supported version is now 0.3.x.
+
 ## [0.3.1] - 2026-10-23
 
 ### Changed
