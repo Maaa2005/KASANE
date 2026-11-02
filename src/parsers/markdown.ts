@@ -10,12 +10,18 @@ export interface MarkdownInstruction {
   linkTargets: string[];
   /** Value of every inline code span inside this instruction. */
   codeSpans: string[];
+  /** Claude Code `@path` imports in this instruction's own text. */
+  imports: string[];
+  /** Whether the instruction is nothing but `@path` imports. */
+  importsOnly: boolean;
 }
 
 export interface ParsedMarkdown {
   frontmatter: Record<string, unknown>;
   body: string;
   instructions: MarkdownInstruction[];
+  /** Every Claude Code `@path` import in the file, headings included. */
+  imports: string[];
 }
 
 interface MdNode {
@@ -132,6 +138,55 @@ function collectInline(node: MdNode, acc: Inline, definitions: Definitions): voi
   }
 }
 
+/**
+ * A Claude Code `@path` import: an `@` at the start of a text run or after
+ * whitespace, up to the next space that is not escaped with a backslash.
+ * Only text nodes are searched, so code spans and fenced code blocks are
+ * skipped, as Claude Code skips them.
+ */
+const IMPORT_PATTERN = /(^|\s)@((?:\\ |\S)+)/g;
+
+/** A path wrapped in quotes is not imported, with or without escapes. */
+function isQuoted(importPath: string): boolean {
+  return /^["']/.test(importPath);
+}
+
+function importsInText(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.matchAll(IMPORT_PATTERN)) {
+    if (isQuoted(match[2])) continue;
+    found.push(match[2].replace(/\\ /g, " "));
+  }
+  return found;
+}
+
+function collectImports(
+  node: MdNode,
+  children: (node: MdNode) => MdNode[],
+  acc: string[],
+): void {
+  if (node.type === "text" && typeof node.value === "string") {
+    acc.push(...importsInText(node.value));
+  }
+  for (const child of children(node)) {
+    collectImports(child, children, acc);
+  }
+}
+
+function textWithoutImports(node: MdNode): string {
+  if (node.type === "text") {
+    return (node.value ?? "").replace(
+      IMPORT_PATTERN,
+      (match: string, lead: string, importPath: string) =>
+        isQuoted(importPath) ? match : lead,
+    );
+  }
+  if (typeof node.value === "string") {
+    return node.value;
+  }
+  return ownChildren(node).map(textWithoutImports).join("");
+}
+
 export function parseMarkdown(content: string): ParsedMarkdown {
   const { data, body, lineOffset } = splitFrontmatter(content);
 
@@ -152,12 +207,17 @@ export function parseMarkdown(content: string): ParsedMarkdown {
       if (text.length > 0) {
         const inline: Inline = { linkTargets: [], codeSpans: [] };
         collectInline(node, inline, definitions);
+        const imports: string[] = [];
+        collectImports(node, ownChildren, imports);
         instructions.push({
           content: text,
           lineStart: node.position.start.line + lineOffset,
           lineEnd: node.position.end.line + lineOffset,
           linkTargets: inline.linkTargets,
           codeSpans: inline.codeSpans,
+          imports,
+          importsOnly:
+            imports.length > 0 && textWithoutImports(node).trim() === "",
         });
       }
     }
@@ -172,9 +232,13 @@ export function parseMarkdown(content: string): ParsedMarkdown {
 
   visit(tree);
 
+  const imports: string[] = [];
+  collectImports(tree, (node) => node.children ?? [], imports);
+
   return {
     frontmatter: data,
     body,
     instructions,
+    imports,
   };
 }
