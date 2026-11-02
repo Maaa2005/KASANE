@@ -28,6 +28,13 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ### Fixed
 
+- KASANE004 recognizes more npm version requirements in a pnpm or yarn
+  repository: versions with dots (`Node 20.11 and npm 10.`, `20.x`),
+  `>=`, `npm@10`, and `Node: 20 / npm: 10`. `run npm install.` is still
+  reported.
+- A URL password containing a raw `@` (`postgres://u:Pw@ss1234@host`) is
+  masked in full; the last `@` before the host ends the user info.
+
 - KASANE004 skips options before an npm-only subcommand
   (`npm --registry=https://registry.npmjs.org publish`, `npm --prefix app
   version`), and also treats `token`, `logout`, `owner`, `access`, `adduser`,

@@ -150,6 +150,22 @@ describe("URL credentials", () => {
     expect(redactSecrets(text)).toBe("postgres://app:***@db.example.com/app");
   });
 
+  it("masks a raw @ inside the password up to the last @ before the host", () => {
+    const text = "DATABASE_URL=postgres://u:Pw@ss1234@host.example.com:5432/app";
+    expect(findPossibleSecrets(text)).toEqual([
+      { pattern: "URL credentials", value: "Pw@ss1234" },
+    ]);
+    expect(redactSecrets(text)).toBe(
+      "DATABASE_URL=postgres://u:***@host.example.com:5432/app",
+    );
+  });
+
+  it("does not run past the authority into the path or query", () => {
+    expect(
+      redactSecrets("postgres://u:Pw9x7q2@host/app?owner=a@b.example"),
+    ).toBe("postgres://u:***@host/app?owner=a@b.example");
+  });
+
   it.each([
     "https://user@example.com/path",
     "git clone ssh://git@github.com:22/org/repo.git",

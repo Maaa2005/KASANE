@@ -488,12 +488,23 @@ const NPM_GLOBAL_INSTALL_PATTERN =
   /\bnpm\s+(?:i|install|add)\b(?=[^\n;&|`]*\s(?:-g|--global(?:=true)?|--location(?:=|\s+)global)(?![\w=-]))[^\n;&|`]*/g;
 
 /**
+ * One character of the text between "Node" and "npm" in a version
+ * requirement. A sentence end (`.`, `;`, `:`, `!`, `?`, newline) stops it,
+ * but the dots inside a version (`20.11.0`, `20.x`), the dot of `Node.js`
+ * and a colon that introduces a version (`Node: 20`) do not.
+ */
+const NPM_REQUIREMENT_GAP =
+  String.raw`(?:[^.;:!?\n]|(?<=[\dx*])\.(?=[\dx*])|(?<=\bnode)\.(?=js\b)|:(?=\s*[v<>=^~\d]))`;
+
+/**
  * "Requires Node 20 and npm 10": a version requirement for the npm that
  * ships with Node, not an instruction to run npm. Only the `npm` is
  * dropped, so other managers in the sentence still count.
  */
-const NPM_VERSION_REQUIREMENT_PATTERN =
-  /(\b(?:requires?|required|needs?|node(?:\.js)?|engines?|supports?)\b[^.;:!?\n]{0,60}?)\bnpm(?=\s*(?:>=?|\^|~|v)?\s*\d)/gi;
+const NPM_VERSION_REQUIREMENT_PATTERN = new RegExp(
+  String.raw`(\b(?:requires?|required|needs?|node(?:\.js)?|engines?|supports?)\b${NPM_REQUIREMENT_GAP}{0,60}?)\bnpm(?=\s*(?:@|:|[<>]=?|=|\^|~)?\s*v?\d)`,
+  "gi",
+);
 
 /**
  * "npm" as the registry or the ecosystem rather than the CLI: "publish to

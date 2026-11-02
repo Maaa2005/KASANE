@@ -80,9 +80,12 @@ const SECRET_PATTERNS: SecretPattern[] = [
   ),
   // `scheme://user:password@host`. Only the password is the secret, and
   // `https://user@host` has none. The user part may be empty (`redis://:pw@`).
+  // The authority ends at `/`, `?`, `#`, whitespace or a quote, and the last
+  // `@` before that ends the userinfo, as in a URL parser: a raw `@` inside
+  // the password (`Pw@ss1234`) is masked with the rest.
   {
     name: "URL credentials",
-    pattern: /(?<=:\/\/)[^\s/:@]{0,128}:([^\s/@]{1,2048})@/g,
+    pattern: /(?<=:\/\/)[^\s/:@]{0,128}:([^\s/?#"'`]{1,2048})@/g,
     group: 1,
     accept: isUrlPassword,
   },

@@ -178,7 +178,7 @@ Every diagnostic carries one of these IDs.
 | `KASANE004` | warning / error | An instruction names a different package manager than the lockfile or `packageManager` field; also conflicting lockfiles, or a declaration that disagrees with the lockfile |
 | `KASANE005` | warning | A context file (over 4,000 estimated tokens) or the whole context (over 8,000) is large |
 | `KASANE006` | warning | A machine-specific absolute path that will not resolve on other machines |
-| `KASANE007` | error | A string that looks like an API key, token or password (always masked in output) |
+| `KASANE007` | error | A string that looks like a known API key or token, a private key header, a Bearer token, or a password inside a URL (`scheme://user:password@host`); detected values are always masked in output. Passwords written as `key=value` (`DB_PASSWORD=...`, `password: ...`) are not detected yet |
 
 ## Supported agents / config files
 
@@ -210,6 +210,8 @@ analysis**. The following are intentionally out of scope for now:
   rules (KASANE003 and KASANE004) yet. They read inline code spans and
   prose only, so a stale `npm run build` in a fenced block goes unreported.
   This is a current limitation. KASANE007 (secrets) does scan fenced blocks
+- Commands beyond the first 4000 characters of a line are not checked by
+  the command rules (KASANE003 and KASANE004)
 - Whether an agent actually loads a description-matched rule at runtime
   (an Agent-Requested rule is reported as reaching its whole subtree,
   which is an upper bound, not a prediction)

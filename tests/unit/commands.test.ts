@@ -225,6 +225,12 @@ describe("extractMentionedManagers: npm in a pnpm or yarn repository", () => {
     ["Needs npm 10 or newer.", []],
     ["Node 20 / npm 10 are required.", []],
     ["Requires Node 20 and npm 10, and use pnpm.", ["pnpm"]],
+    ["Requires Node 20.11 and npm 10.", []],
+    ["Node.js >= 20.11.0 and npm >= 10", []],
+    ["Node 20.x, npm 10.x", []],
+    ["Node: 20 / npm: 10", []],
+    ["node >=20 and npm@10", []],
+    ["Requires Node.js 20.11.0 and npm@10.2.3, and use pnpm.", ["pnpm"]],
   ])("ignores an npm version requirement: %j", (text, expected) => {
     expect(extractMentionedManagers(text, "pnpm")).toEqual(expected);
   });
@@ -234,6 +240,9 @@ describe("extractMentionedManagers: npm in a pnpm or yarn repository", () => {
     ["Use `npm run build`.", ["npm"]],
     ["Run `npm install` (non-global) then `npm publish`.", ["npm"]],
     ["Run `npm install -g pnpm`, then `npm test`.", ["npm"]],
+    ["Requires Node 20.11. Then run npm install.", ["npm"]],
+    ["Requires Node 20.11 and run npm install.", ["npm"]],
+    ["Node: 20. Run npm install.", ["npm"]],
   ])("still reports real npm usage: %j", (text, expected) => {
     expect(extractMentionedManagers(text, "pnpm")).toEqual(expected);
   });
