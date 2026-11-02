@@ -15,11 +15,25 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   with a user name and no password is not flagged), JWTs (`eyJ...`), Notion
   `ntn_` tokens and Supabase `sbp_` tokens. Everything KASANE007 reports is
   masked in `explain`, `diff` and `inspect`, including `--include-content`.
+- URL passwords are skipped as placeholders only when the whole password has
+  an exact placeholder shape (`${VAR}`, `$VAR`, `<...>`, `{{...}}`, `****`,
+  one repeated character, or a word such as `password` or `postgres`).
+  `%40ProdPass7`, passwords starting with `$`, and numeric passwords such as
+  `48213` are now flagged and masked. Passwords up to 2048 characters are
+  matched (was 256), so a long password no longer leaks.
+- JWTs whose header or payload JSON contains whitespace (base64 `eyA...` or
+  `ew...`) are detected and masked.
 - A secret contained in a larger match (a JWT after `Bearer`) is reported
   once, as the outer match.
 
 ### Fixed
 
+- KASANE004 skips options before an npm-only subcommand
+  (`npm --registry=https://registry.npmjs.org publish`, `npm --prefix app
+  version`), and also treats `token`, `logout`, `owner`, `access`, `adduser`,
+  `profile` and `star` as npm-only. `npm install --global=false` and
+  `npm install pkg --global-style` are no longer treated as global installs;
+  only `-g`, `--global`, `--global=true` and `--location=global` are.
 - KASANE004 no longer warns, in a pnpm or yarn repository, about npm-only
   subcommands (`npm publish`, `view`, `audit`, `pack`, `version`, `login`,
   `whoami`, `dist-tag`, `deprecate`), about `npm install -g ...` /

@@ -159,11 +159,37 @@ describe("extractMentionedManagers: npm in a pnpm or yarn repository", () => {
     "whoami",
     "dist-tag",
     "deprecate",
+    "logout",
+    "token",
+    "owner",
+    "access",
+    "adduser",
+    "profile",
+    "star",
   ])("ignores the npm-only subcommand `npm %s`", (subcommand) => {
     const text = `Run \`npm ${subcommand} foo\` when needed.`;
 
     expect(extractMentionedManagers(text, "pnpm")).toEqual([]);
     expect(extractMentionedManagers(text, "yarn")).toEqual([]);
+  });
+
+  it.each([
+    "Release with `npm --registry=https://registry.npmjs.org publish`.",
+    "Release with `npm --registry https://registry.npmjs.org publish`.",
+    "Release with `npm --prefix packages/app --otp=123456 publish`.",
+    "Release with `npm -w app publish`.",
+    "Release with `npm --userconfig .npmrc --silent token list`.",
+    "Run `npm --no-git-tag-version version patch`.",
+    "Run `npm --registry=https://registry.npmjs.org token list`.",
+  ])("skips options before an npm-only subcommand: %j", (text) => {
+    expect(extractMentionedManagers(text, "pnpm")).toEqual([]);
+  });
+
+  it.each([
+    "Run `npm --registry=https://registry.npmjs.org install`.",
+    "Run `npm --prefix app run build`.",
+  ])("still reports options before a regular npm command: %j", (text) => {
+    expect(extractMentionedManagers(text, "pnpm")).toEqual(["npm"]);
   });
 
   it("ignores npm-only subcommands next to the manager in use", () => {
@@ -177,8 +203,20 @@ describe("extractMentionedManagers: npm in a pnpm or yarn repository", () => {
     "Run `npm i -g yarn` first.",
     "Install it with `npm install --global pnpm`.",
     "npm install pnpm -g",
+    "Run `npm install pnpm --global=true`.",
+    "Run `npm install --location=global pnpm`.",
+    "Run `npm install --location global pnpm`.",
   ])("ignores a global install through npm: %j", (text) => {
     expect(extractMentionedManagers(text, "yarn")).toEqual([]);
+  });
+
+  it.each([
+    "Run `npm install --global=false`.",
+    "Run `npm install pkg --global-style`.",
+    "Run `npm install --location=project`.",
+    "Run `npm install --location=globalx`.",
+  ])("does not treat a non-global install as global: %j", (text) => {
+    expect(extractMentionedManagers(text, "yarn")).toEqual(["npm"]);
   });
 
   it.each([

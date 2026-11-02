@@ -128,6 +128,29 @@ describe("URL credentials", () => {
   });
 
   it.each([
+    "postgres://app:%40ProdPass7@db.example.com/app",
+    "postgres://app:$ecretP4ss@db.example.com/app",
+    "postgres://app:48213@db.example.com/app",
+    "postgres://app:${DB_PASSWORD}x9@db.example.com/app",
+    "postgres://app:password1@db.example.com/app",
+    "postgres://app:$x@db.example.com/app",
+  ])("flags a password that only looks like a placeholder: %j", (text) => {
+    expect(patterns(text)).toEqual(["URL credentials"]);
+    expect(redactSecrets(text)).toContain(":***@");
+  });
+
+  it("flags a password longer than 256 characters", () => {
+    const password = `Ab1${"xK9".repeat(100)}`;
+    const text = `postgres://app:${password}@db.example.com/app`;
+
+    expect(password.length).toBeGreaterThan(256);
+    expect(findPossibleSecrets(text)).toEqual([
+      { pattern: "URL credentials", value: password },
+    ]);
+    expect(redactSecrets(text)).toBe("postgres://app:***@db.example.com/app");
+  });
+
+  it.each([
     "https://user@example.com/path",
     "git clone ssh://git@github.com:22/org/repo.git",
     "git@github.com:org/repo.git",
@@ -135,6 +158,10 @@ describe("URL credentials", () => {
     "http://localhost:3000/api",
     "postgres://user:${DB_PASSWORD}@localhost/app",
     "postgres://user:<password>@localhost/app",
+    "postgres://user:$DB_PASSWORD@localhost/app",
+    "postgres://user:{{ db_password }}@localhost/app",
+    "postgres://user:Password@localhost/app",
+    "postgres://user:aaaaaaaa@localhost/app",
     "postgres://user:YOUR_PASSWORD@localhost/app",
     "postgres://user:password@localhost/app",
     "postgres://postgres:postgres@localhost/app",
@@ -149,6 +176,20 @@ describe("JWT, Notion and Supabase tokens", () => {
   it("flags a JWT and masks it", () => {
     expect(patterns(`token ${JWT}`)).toEqual(["JWT"]);
     expect(redactSecrets(`token ${JWT}`)).not.toContain("dozjgNryP4J3jVmNHl0w5N");
+  });
+
+  it.each([
+    ["spaces in the payload", '{"alg":"HS256"}', '{ "sub": "1234567890" }'],
+    ["spaces in the header", '{ "alg": "HS256" }', '{"sub":"1234567890"}'],
+    ["a newline in the header", '{\n"alg": "HS256"}', '{"sub":"1234567890"}'],
+    ["a tab in the payload", '{"alg":"HS256"}', '{\t"sub":"1234567890"}'],
+  ])("flags a JWT whose JSON has whitespace: %s", (_name, header, payload) => {
+    const b64 = (json: string) => Buffer.from(json).toString("base64url");
+    const signature = "dozjgNryP4J3jVmNHl0w5N";
+    const token = [b64(header), b64(payload), signature].join(".");
+
+    expect(patterns(`token ${token}`)).toEqual(["JWT"]);
+    expect(redactSecrets(`token ${token}`)).not.toContain(signature);
   });
 
   it("reports a bearer JWT once, as the bearer match", () => {

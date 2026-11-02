@@ -459,20 +459,33 @@ const NEGATED_MANAGER_PATTERNS = [
   ),
 ];
 
+const NPM_OPTION_VALUE_FLAGS =
+  "registry|prefix|userconfig|globalconfig|cache|otp|tag|scope|workspace|loglevel|location";
+
+/**
+ * Options npm accepts before the subcommand: `-x`, `--flag`, `--flag=value`
+ * and `--flag value` for flags that take a value.
+ */
+const NPM_LEADING_OPTIONS = String.raw`(?:\s+(?:--(?:${NPM_OPTION_VALUE_FLAGS})\s+[^\s-]\S*|-[wC]\s+[^\s-]\S*|-{1,2}[A-Za-z][\w-]*(?:=\S*)?))*`;
+
 /**
  * `npm` subcommands that exist only on npm (registry and package metadata
  * work), which pnpm and yarn repositories run through npm as well.
  */
-const NPM_ONLY_COMMAND_PATTERN =
-  /\bnpm\s+(?:publish|view|audit|pack|version|login|whoami|dist-tag|deprecate)\b/g;
+const NPM_ONLY_COMMAND_PATTERN = new RegExp(
+  String.raw`\bnpm${NPM_LEADING_OPTIONS}\s+(?:publish|view|audit|pack|version|login|logout|whoami|dist-tag|deprecate|token|owner|access|adduser|profile|star)\b`,
+  "g",
+);
 
 /**
  * `npm install -g pnpm`: npm is only the bootstrap for another tool, and the
  * packages it installs (often pnpm or yarn itself) are not the repository's
- * manager either.
+ * manager either. Only `-g`, `--global`, `--global=true` and
+ * `--location=global` make it global: `--global=false` and `--global-style`
+ * do not.
  */
 const NPM_GLOBAL_INSTALL_PATTERN =
-  /\bnpm\s+(?:i|install|add)\b(?=[^\n;&|`]*\s(?:-g|--global)\b)[^\n;&|`]*/g;
+  /\bnpm\s+(?:i|install|add)\b(?=[^\n;&|`]*\s(?:-g|--global(?:=true)?|--location(?:=|\s+)global)(?![\w=-]))[^\n;&|`]*/g;
 
 /**
  * "Requires Node 20 and npm 10": a version requirement for the npm that

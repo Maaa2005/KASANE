@@ -30,14 +30,25 @@ function prefixed(name: string, body: string, flags = "g"): SecretPattern {
   return { name, pattern: new RegExp(`${START}${body}`, flags) };
 }
 
-// Passwords in URLs that are placeholders rather than credentials:
-// `${DB_PASSWORD}`, `<password>`, `YOUR_PASSWORD`, `****`, a port number,
-// and the well-known default logins of local development databases.
-const URL_PASSWORD_PLACEHOLDER =
-  /^(?:[$<{[%(*:]|\d{1,5}$|(?:your|my|the)?[_-]?(?:password|passwd|pass|pwd|secret|token|changeme|example|redacted|placeholder|postgres|root|admin|test|guest|demo|default|user|username|mysql|redis|x+)$)/i;
+// Passwords in URLs that are placeholders rather than credentials. Only
+// exact placeholder shapes are skipped, never by a leading `$`, `%` or digit:
+// `%40ProdPass7` (a percent-encoded `@`) and `12345` are real passwords.
+const URL_PASSWORD_PLACEHOLDERS: RegExp[] = [
+  /^\$\{[^}]*\}$/, // ${DB_PASSWORD}
+  /^\$[A-Z_][A-Z0-9_]*$/, // $DB_PASSWORD
+  /^<[^<>]*>$/, // <password>
+  /^\{\{[^{}]*\}\}$/, // {{ password }}
+  /^\*+$/, // ********
+  // The whole password is a placeholder word or a well-known default login
+  // of a local development database.
+  /^(?:(?:your|my|the)?[_-]?)(?:password|passwd|pass|pwd|secret|token|changeme|example|redacted|placeholder|postgres|root|admin|test|guest|demo|default|user|username|mysql|redis)$/i,
+];
 
 function isUrlPassword(value: string): boolean {
-  return !URL_PASSWORD_PLACEHOLDER.test(value) && !/^(.)\1*$/.test(value);
+  return (
+    !URL_PASSWORD_PLACEHOLDERS.some((placeholder) => placeholder.test(value)) &&
+    !/^(.)\1*$/.test(value)
+  );
 }
 
 const SECRET_PATTERNS: SecretPattern[] = [
@@ -59,17 +70,19 @@ const SECRET_PATTERNS: SecretPattern[] = [
   // Notion integration tokens and Supabase personal access tokens.
   prefixed("ntn_", "ntn_[A-Za-z0-9]{20,}"),
   prefixed("sbp_", "sbp_[A-Za-z0-9]{20,}"),
-  // JSON Web Tokens: base64url header and payload (both start `{"`), then
-  // a signature. Truncated examples such as `eyJhbGciOi...` do not match.
+  // JSON Web Tokens: base64url header and payload, then a signature. Both
+  // JSON parts start with `{`: `eyJ` is `{"`, `eyA` is `{ ` and `ew` is `{`
+  // plus a newline or tab. Truncated examples such as `eyJhbGciOi...` do not
+  // match.
   prefixed(
     "JWT",
-    String.raw`eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}`,
+    String.raw`e[yw][A-Za-z0-9_-]{8,}\.e[yw][A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}`,
   ),
   // `scheme://user:password@host`. Only the password is the secret, and
   // `https://user@host` has none. The user part may be empty (`redis://:pw@`).
   {
     name: "URL credentials",
-    pattern: /(?<=:\/\/)[^\s/:@]{0,128}:([^\s/@]{1,256})@/g,
+    pattern: /(?<=:\/\/)[^\s/:@]{0,128}:([^\s/@]{1,2048})@/g,
     group: 1,
     accept: isUrlPassword,
   },
