@@ -192,8 +192,9 @@ KASANEは**静的解析で再現できる範囲**のみを対象とします。�
   どうか(Agent-Requested rulesは、そのルールが属するサブツリー全体に届くもの
   として報告します。これは上限値であり、実行時の予測ではありません)
 - Claude Codeの`@path`インポートのうち、リポジトリの外を指すもの(`@~/…`、
-  `@../…`)と、Markdown・テキスト以外のファイル(`@package.json`)。リポジトリ内の
-  Markdownファイルへのインポートは、`CLAUDE.md`・`.claude/CLAUDE.md`・
+  `@../…`)、`.git/`・`node_modules/`の中を指すもの、Markdown・テキスト以外の
+  ファイル(`@package.json`)。リポジトリ内の`.md`・`.mdc`・`.markdown`・`.txt`と
+  拡張子なしの`README`へのインポートは、`CLAUDE.md`・`.claude/CLAUDE.md`・
   `CLAUDE.local.md`から最大4段まで展開し、インポート元と同じ範囲に適用します
 - Claude CodeとCopilotにとっての`AGENTS.md`。Claude Codeは`CLAUDE.md`が
   無いときだけ読み、Copilotは対象ファイルに最も近い1つだけを読みます。

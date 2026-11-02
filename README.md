@@ -196,10 +196,12 @@ analysis**. The following are intentionally out of scope for now:
   (an Agent-Requested rule is reported as reaching its whole subtree,
   which is an upper bound, not a prediction)
 - Claude Code `@path` imports that leave the repository (`@~/…`,
-  `@../…`) or name a file that is not Markdown or plain text
-  (`@package.json`). Imports of Markdown files inside the repository are
-  expanded from `CLAUDE.md`, `.claude/CLAUDE.md` and `CLAUDE.local.md`,
-  up to four hops deep, and apply where the importing file applies
+  `@../…`), point into `.git/` or `node_modules/`, or name a file that is
+  not Markdown or plain text (`@package.json`). Imports of `.md`, `.mdc`,
+  `.markdown` and `.txt` files and of an extension-less `README` inside the
+  repository are expanded from `CLAUDE.md`, `.claude/CLAUDE.md` and
+  `CLAUDE.local.md`, up to four hops deep, and apply where the importing
+  file applies
 - `AGENTS.md` for Claude Code and Copilot. Claude Code reads it only when
   there is no `CLAUDE.md`, and Copilot reads only the one nearest the
   target file. Neither rule is modeled, so `AGENTS.md` is counted for

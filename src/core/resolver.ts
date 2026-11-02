@@ -98,25 +98,31 @@ export function resolveEffectiveContext(
     return instruction.scope.patterns.some(matchesGlob);
   };
 
-  // Instructions loaded through `@path` imports follow each file's own. An
-  // instruction already in the list — imported by two CLAUDE.md files, or
-  // read directly as well — is kept once.
-  const seen = new Set<string>();
-  const instructions = [
+  // Instructions loaded through `@path` imports follow each file's own.
+  const reaching = [
     ...context.instructions,
     ...(context.importedInstructions ?? []),
-  ].filter((instruction) => {
-    if (!instruction.agents.includes(options.agent)) return false;
+  ].filter(
+    (instruction) =>
+      instruction.agents.includes(options.agent) && inScope(instruction),
+  );
+
+  // An import line is stood in for by what it imports, and an instruction
+  // already in the list (imported by two CLAUDE.md files, or read directly
+  // as well) is kept once.
+  const seen = new Set<string>();
+  const instructions = reaching.filter((instruction) => {
     if (instruction.importsOnly) return false;
-    if (!inScope(instruction)) return false;
     if (seen.has(instruction.id)) return false;
     seen.add(instruction.id);
     return true;
   });
 
+  // Every file that reaches the agent is a source, including one whose only
+  // content is an import line.
   const includedPaths = new Set<string>();
   const importedPaths = new Set<string>();
-  for (const instruction of instructions) {
+  for (const instruction of reaching) {
     includedPaths.add(instruction.source.relativePath);
     if (instruction.importedBy !== undefined) {
       includedPaths.add(instruction.importedBy);

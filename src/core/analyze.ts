@@ -170,6 +170,7 @@ function agentsFor(
     case "cursor":
       return isLoadedCursorRule(relativePath, frontmatter) ? ["cursor"] : [];
     case "mcp":
+    case "import":
       return [];
   }
 }
@@ -284,7 +285,10 @@ const IMPORTABLE_EXTENSIONS = new Set([".md", ".mdc", ".markdown", ".txt"]);
  * null when KASANE does not follow it. A relative import is resolved against
  * the importing file's directory, as Claude Code does. Nothing outside the
  * repository (`~/…`, `../…`, an absolute path elsewhere) is read, and only
- * Markdown and plain-text files are parsed for instructions.
+ * Markdown and plain-text files are parsed for instructions — plus an
+ * extension-less `README`, the example Claude Code's documentation uses.
+ * `.git/` and `node_modules/` are never read: a checkout's CLAUDE.md must
+ * not be able to print the local `.git/config` and the credentials in it.
  */
 function resolveImport(
   root: string,
@@ -304,10 +308,16 @@ function resolveImport(
     return null;
   }
   const relativePath = relative.split(path.sep).join("/");
-  const name = path.posix.basename(relativePath);
+  const segments = relativePath.split("/");
+  if (segments.some((segment) => segment === ".git" || segment === "node_modules")) {
+    return null;
+  }
+  const name = segments[segments.length - 1];
   const extension = path.posix.extname(name).toLowerCase();
   const isText =
-    extension === "" ? !name.startsWith(".") : IMPORTABLE_EXTENSIONS.has(extension);
+    extension === ""
+      ? name.toLowerCase() === "readme"
+      : IMPORTABLE_EXTENSIONS.has(extension);
   return isText ? relativePath : null;
 }
 
@@ -490,7 +500,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
       id: relativePath,
       filePath: file.filePath,
       relativePath,
-      sourceType: "claude",
+      sourceType: "import",
       // Nothing loads it on its own; it reaches Claude Code through imports.
       agents: [],
       content,

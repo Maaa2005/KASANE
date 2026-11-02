@@ -6,7 +6,9 @@ export type SourceType =
   | "cursor"
   | "gemini"
   | "copilot"
-  | "mcp";
+  | "mcp"
+  /** A file Claude Code reads only because a CLAUDE.md imports it. */
+  | "import";
 
 export interface ContextSource {
   id: string;

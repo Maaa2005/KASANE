@@ -78,6 +78,28 @@ describe("Claude Code @path imports", () => {
     expect(sources).toEqual(["AGENTS.md", "CLAUDE.md"]);
   });
 
+  it("keeps every importing file in Claude's sources when two import the same file", async () => {
+    const repo = makeRepo({
+      "AGENTS.md": AGENTS_MD,
+      "CLAUDE.md": "@AGENTS.md\n",
+      "CLAUDE.local.md": "@AGENTS.md\n",
+    });
+
+    const { sources } = await claudeContext(repo);
+    expect(sources).toEqual(["AGENTS.md", "CLAUDE.local.md", "CLAUDE.md"]);
+  });
+
+  it("lists a file that only passes an import on as one of Claude's sources", async () => {
+    const repo = makeRepo({
+      "CLAUDE.md": "@hub.md\n",
+      "hub.md": "@real.md\n",
+      "real.md": "- Real.\n",
+    });
+
+    const { sources } = await claudeContext(repo);
+    expect(sources).toEqual(["CLAUDE.md", "hub.md", "real.md"]);
+  });
+
   it("keeps Claude-specific instructions below the import as Claude only", async () => {
     const repo = makeRepo({
       "AGENTS.md": AGENTS_MD,
@@ -214,6 +236,36 @@ describe("Claude Code @path imports", () => {
 
     const { instructions } = await claudeContext(repo);
     expect(instructions).toEqual(["@package.json"]);
+  });
+
+  it("never reads git metadata, dependencies or other extension-less files", async () => {
+    const repo = makeRepo({
+      ".git/config": "[remote]\n\turl = https://alice:hunter2pass@example.com/x.git\n",
+      "node_modules/pkg/README.md": "- From a dependency.\n",
+      "LICENSE": "Permission is hereby granted.\n",
+      "README": "- Read the overview.\n",
+      "CLAUDE.md": "@.git/config\n\n@node_modules/pkg/README.md\n\n@LICENSE\n\n@README\n",
+    });
+
+    const { instructions } = await claudeContext(repo);
+    expect(instructions).toEqual([
+      "@.git/config",
+      "@node_modules/pkg/README.md",
+      "@LICENSE",
+      "Read the overview.",
+    ]);
+  });
+
+  it("marks an imported file that is not a config file as an import", async () => {
+    const repo = makeRepo({
+      "docs/git.md": "- Squash before merging.\n",
+      "CLAUDE.md": "@docs/git.md\n",
+    });
+
+    const context = await buildAnalysisContext(repo);
+    expect(
+      context.importedSources?.map((source) => [source.relativePath, source.sourceType]),
+    ).toEqual([["docs/git.md", "import"]]);
   });
 
   it("does not expand imports for agents other than Claude Code", async () => {

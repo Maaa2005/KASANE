@@ -8,6 +8,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   gemini: "GEMINI.md",
   copilot: "Copilot instructions",
   mcp: "MCP server config",
+  import: "Imported by CLAUDE.md",
 };
 
 export function renderText(result: InspectResult): string {
