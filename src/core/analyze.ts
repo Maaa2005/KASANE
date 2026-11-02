@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { discoverConfigFiles, resolveFileInside } from "./discover.js";
 import { aliasSourcePaths } from "./aliases.js";
-import { parseMarkdown } from "../parsers/markdown.js";
+import {
+  parseMarkdown,
+  type MarkdownInstruction,
+  type ParsedMarkdown,
+} from "../parsers/markdown.js";
 import { estimateTokens } from "./tokenizer.js";
 import { normalizeInstruction } from "../utils/normalize.js";
 import { redactSecrets } from "../utils/secrets.js";
@@ -224,6 +228,89 @@ function computeScope(
   return scopeToBase(base);
 }
 
+interface ParsedFile {
+  filePath: string;
+  relativePath: string;
+  parsed: ParsedMarkdown;
+}
+
+function buildInstructions(
+  file: ParsedFile,
+  agents: AgentType[],
+  scope: ContextInstruction["scope"],
+  extra: (instruction: MarkdownInstruction) => Partial<ContextInstruction>,
+): ContextInstruction[] {
+  return file.parsed.instructions.map((instruction, index) => {
+    const references = Array.from(
+      new Set([
+        ...extractFileReferences(instruction.content),
+        ...extractExplicitReferences(
+          instruction.linkTargets,
+          instruction.codeSpans,
+        ),
+      ]),
+    );
+
+    return {
+      id: `${file.relativePath}#${index}`,
+      source: {
+        filePath: file.filePath,
+        relativePath: file.relativePath,
+        lineStart: instruction.lineStart,
+        lineEnd: instruction.lineEnd,
+      },
+      agents,
+      scope,
+      content: instruction.content,
+      // Normalizing lowercases, which turns `AKIA…` into text no secret
+      // pattern recognizes. Mask first.
+      normalizedContent: normalizeInstruction(
+        redactSecrets(instruction.content),
+      ),
+      estimatedTokens: estimateTokens(instruction.content),
+      references,
+      ...extra(instruction),
+    };
+  });
+}
+
+/** Claude Code follows `@path` imports this many hops deep. */
+const MAX_IMPORT_HOPS = 4;
+
+const IMPORTABLE_EXTENSIONS = new Set([".md", ".mdc", ".markdown", ".txt"]);
+
+/**
+ * The repository-relative path an `@path` import in `fromFile` names, or
+ * null when KASANE does not follow it. A relative import is resolved against
+ * the importing file's directory, as Claude Code does. Nothing outside the
+ * repository (`~/…`, `../…`, an absolute path elsewhere) is read, and only
+ * Markdown and plain-text files are parsed for instructions.
+ */
+function resolveImport(
+  root: string,
+  fromFile: string,
+  importPath: string,
+): string | null {
+  if (importPath.startsWith("~")) return null;
+  const absolute = path.resolve(root, path.posix.dirname(fromFile), importPath);
+  const relative = path.relative(root, absolute);
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative) ||
+    !resolveFileInside(root, relative)
+  ) {
+    return null;
+  }
+  const relativePath = relative.split(path.sep).join("/");
+  const name = path.posix.basename(relativePath);
+  const extension = path.posix.extname(name).toLowerCase();
+  const isText =
+    extension === "" ? !name.startsWith(".") : IMPORTABLE_EXTENSIONS.has(extension);
+  return isText ? relativePath : null;
+}
+
 async function readPackageJson(
   root: string,
   dir = ".",
@@ -330,6 +417,20 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
 
   const sources: ContextSource[] = [];
   const instructions: ContextInstruction[] = [];
+  const parsedFiles = new Map<string, ParsedFile>();
+
+  // An instruction made only of imports KASANE follows is stood in for by
+  // the files it imports.
+  const replacedByImports = (
+    fromFile: string,
+    instruction: MarkdownInstruction,
+  ): Partial<ContextInstruction> =>
+    instruction.importsOnly &&
+    instruction.imports.every(
+      (importPath) => resolveImport(absoluteRoot, fromFile, importPath) !== null,
+    )
+      ? { importsOnly: true }
+      : {};
 
   discovered.forEach((file, fileIndex) => {
     const content = contents[fileIndex];
@@ -349,37 +450,15 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
         file.sourceType,
         parsed.frontmatter,
       );
-      parsed.instructions.forEach((instruction, index) => {
-        const references = Array.from(
-          new Set([
-            ...extractFileReferences(instruction.content),
-            ...extractExplicitReferences(
-              instruction.linkTargets,
-              instruction.codeSpans,
-            ),
-          ]),
-        );
-
-        instructions.push({
-          id: `${file.relativePath}#${index}`,
-          source: {
-            filePath: file.filePath,
-            relativePath: file.relativePath,
-            lineStart: instruction.lineStart,
-            lineEnd: instruction.lineEnd,
-          },
-          agents,
-          scope,
-          content: instruction.content,
-          // Normalizing lowercases, which turns `AKIA…` into text no secret
-          // pattern recognizes. Mask first.
-          normalizedContent: normalizeInstruction(
-            redactSecrets(instruction.content),
-          ),
-          estimatedTokens: estimateTokens(instruction.content),
-          references,
-        });
-      });
+      const parsedFile = { ...file, parsed };
+      parsedFiles.set(file.relativePath, parsedFile);
+      instructions.push(
+        ...buildInstructions(parsedFile, agents, scope, (instruction) =>
+          file.sourceType === "claude"
+            ? replacedByImports(file.relativePath, instruction)
+            : {},
+        ),
+      );
     }
 
     sources.push({
@@ -393,6 +472,69 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
       ...(file.linkTarget ? { linkTarget: file.linkTarget } : {}),
     });
   });
+
+  const importedSources = new Map<string, ContextSource>();
+  const loadImported = async (relativePath: string): Promise<ParsedFile | null> => {
+    const known = parsedFiles.get(relativePath);
+    if (known) return known;
+    const real = resolveFileInside(absoluteRoot, relativePath);
+    if (!real) return null;
+    const content = await fs.readFile(real, "utf8");
+    const file: ParsedFile = {
+      filePath: path.join(absoluteRoot, relativePath),
+      relativePath,
+      parsed: parseMarkdown(content),
+    };
+    parsedFiles.set(relativePath, file);
+    importedSources.set(relativePath, {
+      id: relativePath,
+      filePath: file.filePath,
+      relativePath,
+      sourceType: "claude",
+      // Nothing loads it on its own; it reaches Claude Code through imports.
+      agents: [],
+      content,
+      estimatedTokens: estimateTokens(content),
+    });
+    return file;
+  };
+
+  // Claude Code expands `@path` imports in its CLAUDE.md files, and in the
+  // files those import, into its context. A CLAUDE.md that only says
+  // `@AGENTS.md` gives Claude Code everything Codex reads.
+  const importedInstructions: ContextInstruction[] = [];
+  for (const source of sources) {
+    const importer = parsedFiles.get(source.relativePath);
+    if (source.sourceType !== "claude" || !importer) continue;
+    const scope = computeScope(
+      source.relativePath,
+      source.sourceType,
+      importer.parsed.frontmatter,
+    );
+    const loaded = new Set([source.relativePath]);
+    const follow = async (
+      fromFile: string,
+      imports: string[],
+      hop: number,
+    ): Promise<void> => {
+      for (const importPath of imports) {
+        const target = resolveImport(absoluteRoot, fromFile, importPath);
+        if (target === null || loaded.has(target)) continue;
+        loaded.add(target);
+        const file = await loadImported(target);
+        if (!file) continue;
+        const followsOn = hop < MAX_IMPORT_HOPS;
+        importedInstructions.push(
+          ...buildInstructions(file, ["claude"], scope, (instruction) => ({
+            importedBy: source.relativePath,
+            ...(followsOn ? replacedByImports(target, instruction) : {}),
+          })),
+        );
+        if (followsOn) await follow(target, file.parsed.imports, hop + 1);
+      }
+    };
+    await follow(source.relativePath, importer.parsed.imports, 1);
+  }
 
   const aliases = aliasSourcePaths(sources);
   const totalEstimatedTokens = sources.reduce(
@@ -421,6 +563,8 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     repository: absoluteRoot,
     sources,
     instructions,
+    importedInstructions,
+    importedSources: Array.from(importedSources.values()),
     totalEstimatedTokens,
     packageJsonScripts: packageJson?.scripts ?? null,
     packageJsonDependencies: packageJson?.dependencies ?? [],

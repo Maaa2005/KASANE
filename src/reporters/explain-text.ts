@@ -76,8 +76,11 @@ export function renderExplainText(
   if (options.showContent) {
     lines.push("Content:");
     for (const instruction of effective.instructions) {
+      const via = instruction.importedBy
+        ? ` (imported by ${instruction.importedBy})`
+        : "";
       lines.push(
-        `  ${instruction.source.relativePath}:${instruction.source.lineStart}`,
+        `  ${instruction.source.relativePath}:${instruction.source.lineStart}${via}`,
       );
       lines.push(`    ${instruction.content}`);
     }

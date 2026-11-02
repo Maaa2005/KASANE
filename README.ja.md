@@ -191,10 +191,14 @@ KASANEは**静的解析で再現できる範囲**のみを対象とします。�
 - 説明文に基づいて適用されるルールを、エージェントが実行時に実際に読み込むか
   どうか(Agent-Requested rulesは、そのルールが属するサブツリー全体に届くもの
   として報告します。これは上限値であり、実行時の予測ではありません)
-- エージェント内部でのみ解決される参照構文(例: Claude Codeの`@path`インポート)
+- Claude Codeの`@path`インポートのうち、リポジトリの外を指すもの(`@~/…`、
+  `@../…`)と、Markdown・テキスト以外のファイル(`@package.json`)。リポジトリ内の
+  Markdownファイルへのインポートは、`CLAUDE.md`・`.claude/CLAUDE.md`・
+  `CLAUDE.local.md`から最大4段まで展開し、インポート元と同じ範囲に適用します
 - Claude CodeとCopilotにとっての`AGENTS.md`。Claude Codeは`CLAUDE.md`が
   無いときだけ読み、Copilotは対象ファイルに最も近い1つだけを読みます。
-  どちらも再現しないため、`AGENTS.md`はCodexとCursorの分だけ数えます
+  どちらも再現しないため、`AGENTS.md`はCodexとCursorの分だけ数えます。
+  `CLAUDE.md`がインポートしている場合はClaude Codeの分にも数えます
 - エージェントのバージョンやプラットフォーム差による挙動の違い
 - リポジトリルート以外の`.gitignore`。検出ファイルの除外にはルートの
   `.gitignore`と`.git/info/exclude`のみを適用します。独自の`.git`を持つ

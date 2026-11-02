@@ -195,11 +195,15 @@ analysis**. The following are intentionally out of scope for now:
 - Whether an agent actually loads a description-matched rule at runtime
   (an Agent-Requested rule is reported as reaching its whole subtree,
   which is an upper bound, not a prediction)
-- In-agent-only reference syntax, such as Claude Code's `@path` imports
+- Claude Code `@path` imports that leave the repository (`@~/…`,
+  `@../…`) or name a file that is not Markdown or plain text
+  (`@package.json`). Imports of Markdown files inside the repository are
+  expanded from `CLAUDE.md`, `.claude/CLAUDE.md` and `CLAUDE.local.md`,
+  up to four hops deep, and apply where the importing file applies
 - `AGENTS.md` for Claude Code and Copilot. Claude Code reads it only when
   there is no `CLAUDE.md`, and Copilot reads only the one nearest the
   target file. Neither rule is modeled, so `AGENTS.md` is counted for
-  Codex and Cursor only
+  Codex and Cursor only, and for Claude Code when a `CLAUDE.md` imports it
 - Behavior differences caused by agent version or platform
 - `.gitignore` files below the repository root — only the root one and
   `.git/info/exclude` are applied when filtering discovered files.

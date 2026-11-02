@@ -5,6 +5,7 @@ import { realPathOf } from "./aliases.js";
 import type {
   AgentType,
   AnalysisContext,
+  ContextInstruction,
   Diagnostic,
   EffectiveContext,
 } from "./types.js";
@@ -88,24 +89,46 @@ export function resolveEffectiveContext(
     return minimatch(target.relativePath, pattern, { partial: true });
   };
 
-  const instructions = context.instructions.filter((instruction) => {
-    if (!instruction.agents.includes(options.agent)) return false;
+  const inScope = (instruction: ContextInstruction): boolean => {
     if (!targetDir) return true;
     if (instruction.scope.type === "repository") return true;
     if (instruction.scope.type === "directory") {
       return isAncestorDir(instruction.scope.patterns[0], targetDir);
     }
     return instruction.scope.patterns.some(matchesGlob);
+  };
+
+  // Instructions loaded through `@path` imports follow each file's own. An
+  // instruction already in the list — imported by two CLAUDE.md files, or
+  // read directly as well — is kept once.
+  const seen = new Set<string>();
+  const instructions = [
+    ...context.instructions,
+    ...(context.importedInstructions ?? []),
+  ].filter((instruction) => {
+    if (!instruction.agents.includes(options.agent)) return false;
+    if (instruction.importsOnly) return false;
+    if (!inScope(instruction)) return false;
+    if (seen.has(instruction.id)) return false;
+    seen.add(instruction.id);
+    return true;
   });
 
-  const includedPaths = new Set(
-    instructions.map((instruction) => instruction.source.relativePath),
-  );
+  const includedPaths = new Set<string>();
+  const importedPaths = new Set<string>();
+  for (const instruction of instructions) {
+    includedPaths.add(instruction.source.relativePath);
+    if (instruction.importedBy !== undefined) {
+      includedPaths.add(instruction.importedBy);
+      importedPaths.add(instruction.source.relativePath);
+    }
+  }
 
-  const sources = context.sources.filter(
+  const sources = [...context.sources, ...(context.importedSources ?? [])].filter(
     (source) =>
       includedPaths.has(source.relativePath) &&
-      source.agents.includes(options.agent),
+      (source.agents.includes(options.agent) ||
+        importedPaths.has(source.relativePath)),
   );
 
   const estimatedTokens = sources.reduce(
