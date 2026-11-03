@@ -14,13 +14,15 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   any depth). A rule without `paths` frontmatter reaches what
   `.claude/CLAUDE.md` reaches; one with `paths` reaches matching files, with
   patterns resolved gitignore-style from the directory holding its `.claude`
-  folder. Rules show as "Claude Code rule" (`sourceType: "claude-rule"`) and
-  their `@path` imports are expanded.
+  folder (dotfiles match, a later `!pattern` excludes, a pattern with an
+  unclosed `[` matches nothing). Rules show as "Claude Code rule"
+  (`sourceType: "claude-rule"`) and their `@path` imports are expanded.
 - Commands in shell code blocks are compared by `diff` and `explain` and
   checked by KASANE001, KASANE003, KASANE004 and KASANE006, one instruction
   per command. Prompts, comments, continued lines and heredoc bodies are
   handled; a block without a language is read only when every line starts
-  with a known program.
+  with a known program. In `--format json` such an instruction carries the
+  raw `command`.
 
 ### Changed
 

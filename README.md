@@ -194,7 +194,9 @@ reaches. With `paths` (a list or a comma-separated string, `{ts,tsx}`
 included) it reaches matching files only. Patterns are relative to the
 directory holding the rule's `.claude` folder and match gitignore-style:
 `*.md` matches at any depth, `/*.md` only directly in that directory, and
-`src/**/*.ts` from that directory. A nested `backend/.claude/rules/` applies
+`src/**/*.ts` from that directory; dotfiles match too. A later `!pattern`
+excludes what an earlier one matched, and a pattern with a `[` that opens
+no bracket expression matches nothing. A nested `backend/.claude/rules/` applies
 to work under `backend/`. Frontmatter that is not valid YAML is ignored, as
 Claude Code ignores it, so `paths: **/*.ts` without quotes loads the rule
 everywhere.
