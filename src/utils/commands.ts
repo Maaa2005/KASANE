@@ -365,13 +365,21 @@ function extractFromSegment(segment: string, inCode: boolean): DetectedCommand[]
  * `--filter`, `--workspace`), tolerates a missing script (`--if-present`)
  * or carries a flag this parser does not know is skipped: a missed command
  * is cheaper than an error for a script that exists.
+ *
+ * With `command`, the whole text is a command from a code block and is read
+ * as code even where it has backticks of its own (`` echo `date` ``).
  */
-export function extractPackageManagerCommands(text: string): DetectedCommand[] {
+export function extractPackageManagerCommands(
+  text: string,
+  { command = false }: { command?: boolean } = {},
+): DetectedCommand[] {
   const cd = CHANGE_DIRECTORY_PATTERN.exec(text);
   const checked = cd ? text.slice(0, cd.index) : text;
 
-  const codeSpans = Array.from(checked.matchAll(CODE_SPAN_PATTERN), (m) => m[1]);
-  const prose = checked.replace(CODE_SPAN_PATTERN, "\n");
+  const codeSpans = command
+    ? [checked]
+    : Array.from(checked.matchAll(CODE_SPAN_PATTERN), (m) => m[1]);
+  const prose = command ? "" : checked.replace(CODE_SPAN_PATTERN, "\n");
 
   const results: DetectedCommand[] = [];
   for (const span of codeSpans) {

@@ -141,6 +141,17 @@ describe("commandsInCodeBlock", () => {
     ]);
   });
 
+  it("does not keep commands together after a cd in a subshell", () => {
+    expect(
+      commands("bash", "(cd web && pnpm build)\npnpm test\nx=$(cd lib && pwd)\npnpm lint"),
+    ).toEqual(["(cd web && pnpm build)", "pnpm test", "x=$(cd lib && pwd)", "pnpm lint"]);
+    expect(commands("bash", 'cd "my app"\npnpm dev')).toEqual(['cd "my app"; pnpm dev']);
+  });
+
+  it("does not continue a line that ends with an escaped backslash", () => {
+    expect(commands("bash", "echo C:\\\\\npnpm test")).toEqual(["echo C:\\\\", "pnpm test"]);
+  });
+
   it("reads a block without an info string when every command starts with a known program", () => {
     expect(commands(null, "npm install\nFOO=1 ./scripts/setup.sh\nsudo npm i -g x")).toEqual([
       "npm install",
@@ -167,15 +178,15 @@ describe("parseMarkdown code blocks", () => {
     );
 
     expect(
-      result.instructions.map(({ content, lineStart, lineEnd, inCodeBlock }) => ({
+      result.instructions.map(({ content, lineStart, lineEnd, command }) => ({
         content,
         lineStart,
         lineEnd,
-        inCodeBlock,
+        command,
       })),
     ).toEqual([
-      { content: "`pnpm install`", lineStart: 7, lineEnd: 7, inCodeBlock: true },
-      { content: "`pnpm test`", lineStart: 8, lineEnd: 8, inCodeBlock: true },
+      { content: "`pnpm install`", lineStart: 7, lineEnd: 7, command: "pnpm install" },
+      { content: "`pnpm test`", lineStart: 8, lineEnd: 8, command: "pnpm test" },
     ]);
   });
 
@@ -184,7 +195,7 @@ describe("parseMarkdown code blocks", () => {
 
     expect(
       result.instructions
-        .filter((instruction) => instruction.inCodeBlock)
+        .filter((instruction) => instruction.command !== undefined)
         .map(({ content, lineStart }) => ({ content, lineStart })),
     ).toEqual([
       { content: "`npm test`", lineStart: 2 },

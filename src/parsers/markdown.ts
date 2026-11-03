@@ -15,8 +15,8 @@ export interface MarkdownInstruction {
   imports: string[];
   /** Whether the instruction is nothing but `@path` imports. */
   importsOnly: boolean;
-  /** Whether the instruction is a command written in a code block. */
-  inCodeBlock: boolean;
+  /** For a command written in a code block, the command itself. */
+  command?: string;
 }
 
 export interface ParsedMarkdown {
@@ -236,7 +236,7 @@ function codeBlockInstructions(
     codeSpans: [],
     imports: [],
     importsOnly: false,
-    inCodeBlock: true,
+    command: command.command,
   }));
 }
 
@@ -271,7 +271,6 @@ export function parseMarkdown(content: string): ParsedMarkdown {
           imports,
           importsOnly:
             imports.length > 0 && textWithoutImports(node).trim() === "",
-          inCodeBlock: false,
         });
       }
     }

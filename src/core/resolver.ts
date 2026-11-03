@@ -82,21 +82,42 @@ export function resolveEffectiveContext(
       ? target.relativePath
       : path.posix.dirname(target.relativePath)
     : undefined;
-  const matchesGlob = (pattern: string, dot: boolean): boolean => {
+  const matchesGlob = (pattern: string, dot = false): boolean => {
     if (!target) return true;
     if (!target.isDirectory) return minimatch(target.relativePath, pattern, { dot });
     if (target.relativePath === ".") return true;
     return minimatch(target.relativePath, pattern, { partial: true, dot });
   };
 
-  const inScope = (instruction: ContextInstruction): boolean => {
-    if (!targetDir) return true;
-    if (instruction.scope.type === "repository") return true;
-    if (instruction.scope.type === "directory") {
-      return isAncestorDir(instruction.scope.patterns[0], targetDir);
+  // The last pattern that matches a file decides, as in .gitignore. A
+  // directory gets the rule when any file under it can match, so its
+  // exclusions are not applied; without a target, any rule that can load.
+  const matchesGitignore = (patterns: string[]): boolean => {
+    if (!target || target.isDirectory) {
+      return patterns.some((pattern) => !pattern.startsWith("!") && matchesGlob(pattern, true));
     }
-    const dot = instruction.scope.dot === true;
-    return instruction.scope.patterns.some((pattern) => matchesGlob(pattern, dot));
+    let matched = false;
+    for (const pattern of patterns) {
+      const negated = pattern.startsWith("!");
+      if (
+        negated === matched &&
+        minimatch(target.relativePath, negated ? pattern.slice(1) : pattern, { dot: true })
+      ) {
+        matched = !negated;
+      }
+    }
+    return matched;
+  };
+
+  const inScope = (instruction: ContextInstruction): boolean => {
+    const { scope } = instruction;
+    if (scope.type === "glob" && scope.gitignore === true) {
+      return matchesGitignore(scope.patterns);
+    }
+    if (!targetDir) return true;
+    if (scope.type === "repository") return true;
+    if (scope.type === "directory") return isAncestorDir(scope.patterns[0], targetDir);
+    return scope.patterns.some((pattern) => matchesGlob(pattern));
   };
 
   // Instructions loaded through `@path` imports follow each file's own.

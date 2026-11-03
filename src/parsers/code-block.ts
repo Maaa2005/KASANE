@@ -221,8 +221,40 @@ function heredocDelimiter(text: string): string | undefined {
 
 /** The text a continued line contributes, or null when it ends the command. */
 function continuedText(text: string, dialect: Dialect): string | null {
-  if (text.endsWith(ESCAPES[dialect])) return text.slice(0, -1).trimEnd();
+  // `\\` at the end is an escaped backslash, not a continuation.
+  const escape = ESCAPES[dialect];
+  let trailing = 0;
+  while (text[text.length - 1 - trailing] === escape) trailing += 1;
+  if (trailing % 2 === 1) return text.slice(0, -1).trimEnd();
   return TRAILING_OPERATOR.test(text) ? text : null;
+}
+
+/**
+ * Whether the commands after `command` run in another directory. A `cd`
+ * inside a subshell or a command substitution (`(cd web && make)`,
+ * `$(cd x && pwd)`) does not change the directory of the next line.
+ */
+function leavesDirectory(command: string, dialect: Dialect): boolean {
+  const escape = ESCAPES[dialect];
+  let outside = "";
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < command.length; index += 1) {
+    let char = command[index];
+    if (char === escape && (quote === null || quote === '"')) {
+      char += command[index + 1] ?? "";
+      index += 1;
+    } else if (quote !== null) {
+      if (char === quote) quote = null;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === "(" || (char === ")" && depth > 0)) {
+      depth += char === "(" ? 1 : -1;
+      continue;
+    }
+    if (depth === 0) outside += char;
+  }
+  return changesDirectory(outside);
 }
 
 /** Whether `line` closes the heredoc or here-string `text` opened. */
@@ -331,7 +363,7 @@ export function commandsInCodeBlock(
   const grouped: CodeBlockCommand[] = [];
   for (const command of commands) {
     const last = grouped[grouped.length - 1];
-    if (last !== undefined && changesDirectory(last.command)) {
+    if (last !== undefined && leavesDirectory(last.command, dialect)) {
       last.command = `${last.command}; ${command.command}`;
       last.lineEnd = command.lineEnd;
     } else {

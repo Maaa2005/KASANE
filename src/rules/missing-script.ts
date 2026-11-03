@@ -53,7 +53,11 @@ export const missingScriptRule: DiagnosticRule = {
       );
       if (reachable === null) continue;
 
-      for (const command of extractPackageManagerCommands(instruction.content)) {
+      const detected =
+        instruction.command !== undefined
+          ? extractPackageManagerCommands(instruction.command, { command: true })
+          : extractPackageManagerCommands(instruction.content);
+      for (const command of detected) {
         if (reachable.scripts.has(command.script)) continue;
         // `pnpm tsc` and `yarn jest` run the binary when no script matches.
         if (

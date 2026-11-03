@@ -89,6 +89,18 @@ describe("commands in code blocks", () => {
     ]);
   });
 
+  it("checks a command that contains backticks of its own", async () => {
+    const repo = makeRepo({
+      "package.json": PACKAGE_JSON,
+      "AGENTS.md": "```sh\necho `date`; pnpm lint\n```\n",
+    });
+    const { diagnostics } = await analyze(repo);
+
+    expect(
+      diagnostics.filter((d) => d.ruleId === "KASANE003").map((d) => d.metadata?.script),
+    ).toEqual(["lint"]);
+  });
+
   it("does not check the commands after a cd against the root package.json", async () => {
     const repo = makeRepo({
       "package.json": PACKAGE_JSON,

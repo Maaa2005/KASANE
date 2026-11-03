@@ -107,6 +107,32 @@ describe("Claude Code .claude/rules", () => {
     ]);
   });
 
+  it("drops a pattern whose [ opens no bracket expression and keeps the others", async () => {
+    const repo = makeRepo({
+      ".claude/rules/photos.md": rule('\n  - "photos [2024/**"\n  - "docs/**"', "- Keep EXIF."),
+      ".claude/rules/escaped.md": rule('"photos \\\\[2024/**"', "- Literal bracket."),
+      ".claude/rules/invalid.md": rule('"photos [2024/**"', "- Never loads."),
+    });
+
+    expect(await claudeInstructions(repo, "photos [2024/a.jpg")).toEqual(["Literal bracket."]);
+    expect(await claudeInstructions(repo, "docs/a.md")).toEqual(["Keep EXIF."]);
+    // A rule with no valid pattern cannot load anywhere.
+    expect(await claudeInstructions(repo)).not.toContain("Never loads.");
+  });
+
+  it("lets a later !pattern exclude what an earlier one matched", async () => {
+    const repo = makeRepo({
+      ".claude/rules/src.md": rule('\n  - "src/**"\n  - "!src/generated/**"', "- Hand-written code only."),
+      ".claude/rules/only-negated.md": rule('"!src/skip.ts"', "- Excludes only."),
+    });
+
+    expect(await claudeInstructions(repo, "src/app.ts")).toEqual(["Hand-written code only."]);
+    expect(await claudeInstructions(repo, "src/generated/api.ts")).toEqual([]);
+    expect(await claudeInstructions(repo, "README.md")).toEqual([]);
+    // A directory still gets the rule when some file under it matches.
+    expect(await claudeInstructions(repo, "src/")).toEqual(["Hand-written code only."]);
+  });
+
   it("reads the base directory of a nested rule literally", async () => {
     const repo = makeRepo({
       "app/[id]/.claude/rules/page.md": rule('"*.tsx"', "- Await params."),

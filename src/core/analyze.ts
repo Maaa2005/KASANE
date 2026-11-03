@@ -200,16 +200,42 @@ function claudeRuleBaseDir(relativePath: string): string {
  * a pattern without a `/` (`*.md`) matches at any depth, a leading `/`
  * (`/*.md`) anchors it to the base, and any other pattern is relative to
  * the base. The base is a literal path: `app/[id]` is not a bracket glob.
+ * A `!` in front is kept, for an exclusion. Null for a pattern with a `[`
+ * that opens no bracket expression (`photos [2024/**`), which Claude Code
+ * treats as matching nothing.
  */
-function claudeRulePattern(base: string, pattern: string): string {
-  const relative = pattern.startsWith("/")
-    ? pattern.slice(1)
-    : pattern.includes("/")
-      ? pattern.replace(/^\.\//, "")
-      : `**/${pattern}`;
-  return base === "."
-    ? relative
-    : `${escape(base, { windowsPathsNoEscape: true })}/${relative}`;
+function claudeRulePattern(base: string, pattern: string): string | null {
+  const negated = pattern.startsWith("!");
+  const body = negated ? pattern.slice(1) : pattern;
+  if (hasUnclosedBracket(body)) return null;
+  const relative = body.startsWith("/")
+    ? body.slice(1)
+    : body.includes("/")
+      ? body.replace(/^\.\//, "")
+      : `**/${body}`;
+  const anchored =
+    base === "."
+      ? relative
+      : `${escape(base, { windowsPathsNoEscape: true })}/${relative}`;
+  return negated ? `!${anchored}` : anchored;
+}
+
+/** Whether an unescaped `[` in `pattern` has no `]` after it. */
+function hasUnclosedBracket(pattern: string): boolean {
+  for (let index = 0; index < pattern.length; index += 1) {
+    if (pattern[index] === "\\") {
+      index += 1;
+    } else if (pattern[index] === "[") {
+      // `[]a]` and `[!]a]` start with a `]` that belongs to the set.
+      let close = index + 1;
+      if (pattern[close] === "!" || pattern[close] === "^") close += 1;
+      if (pattern[close] === "]") close += 1;
+      const end = pattern.indexOf("]", close);
+      if (end < 0) return true;
+      index = end;
+    }
+  }
+  return false;
 }
 
 /**
@@ -241,13 +267,16 @@ function computeScope(
   const base = ownerDir(relativePath, sourceType);
   if (sourceType === "claude-rule") {
     // `paths` is a list or a comma-separated string. Without it the rule
-    // loads like `.claude/CLAUDE.md` does.
+    // loads like `.claude/CLAUDE.md` does; with only invalid patterns it
+    // matches nothing.
     const paths = normalizeGlobs(frontmatter.paths);
     return paths.length > 0
       ? {
           type: "glob",
-          patterns: paths.map((pattern) => claudeRulePattern(base, pattern)),
-          dot: true,
+          patterns: paths
+            .map((pattern) => claudeRulePattern(base, pattern))
+            .filter((pattern): pattern is string => pattern !== null),
+          gitignore: true,
         }
       : scopeToBase(base);
   }
@@ -307,8 +336,9 @@ function buildInstructions(
 ): ContextInstruction[] {
   return file.parsed.instructions.map((instruction, index) => {
     // A command names the files it creates as well as the ones it reads.
-    const references = instruction.inCodeBlock
-      ? []
+    const references =
+      instruction.command !== undefined
+        ? []
       : Array.from(
           new Set([
             ...extractFileReferences(instruction.content),
@@ -337,6 +367,7 @@ function buildInstructions(
       ),
       estimatedTokens: estimateTokens(instruction.content),
       references,
+      ...(instruction.command !== undefined ? { command: instruction.command } : {}),
       ...extra(instruction),
     };
   });
@@ -509,8 +540,9 @@ function commandDirs(
   base: string,
   scope: ContextInstruction["scope"] | undefined,
 ): string[] {
-  if (scope?.type !== "glob") return [base];
-  const dirs = scope.patterns.map((pattern) => {
+  const included = scope?.patterns.filter((pattern) => !pattern.startsWith("!")) ?? [];
+  if (scope?.type !== "glob" || included.length === 0) return [base];
+  const dirs = included.map((pattern) => {
     const fixed: string[] = [];
     for (const segment of pattern.split("/").slice(0, -1)) {
       if (GLOB_SEGMENT.test(segment)) break;
