@@ -161,6 +161,7 @@ function agentsFor(
     case "agents":
       return ["codex", "cursor"];
     case "claude":
+    case "claude-rule":
       return ["claude"];
     case "gemini":
       return ["gemini"];
@@ -182,13 +183,42 @@ function scopeToBase(base: string): ContextInstruction["scope"] {
 }
 
 /**
+ * The directory a Claude Code rule is anchored to: the one holding its
+ * `.claude` directory. Its `paths` are relative to it, and a nested
+ * `backend/.claude/rules/` loads for work under `backend/`.
+ */
+function claudeRuleBaseDir(relativePath: string): string {
+  const marker = "/.claude/rules/";
+  const index = relativePath.lastIndexOf(marker);
+  return index >= 0 ? relativePath.slice(0, index) : ".";
+}
+
+/**
+ * A `paths` pattern of a Claude Code rule as a repository-relative glob.
+ * Claude Code matches it gitignore-style against the rule's base directory:
+ * a pattern without a `/` (`*.md`) matches at any depth, a leading `/`
+ * (`/*.md`) anchors it to the base, and any other pattern is relative to
+ * the base.
+ */
+function claudeRulePattern(base: string, pattern: string): string {
+  const relative = pattern.startsWith("/")
+    ? pattern.slice(1)
+    : pattern.includes("/")
+      ? pattern.replace(/^\.\//, "")
+      : `**/${pattern}`;
+  return base === "." ? relative : `${base}/${relative}`;
+}
+
+/**
  * The directory a config file belongs to. `.github/copilot-instructions.md`
  * and `.claude/CLAUDE.md` belong to the directory holding `.github` or
- * `.claude`, not to that directory itself, and a Cursor rule to the parent of
- * its `.cursor` directory.
+ * `.claude`, not to that directory itself, a Cursor rule to the parent of
+ * its `.cursor` directory, and a Claude Code rule to the parent of its
+ * `.claude` directory.
  */
 function ownerDir(relativePath: string, sourceType: SourceType): string {
   if (sourceType === "cursor") return cursorBaseDir(relativePath);
+  if (sourceType === "claude-rule") return claudeRuleBaseDir(relativePath);
   const dir = path.posix.dirname(relativePath);
   const dirName = path.posix.basename(dir);
   if (
@@ -206,6 +236,17 @@ function computeScope(
   frontmatter: Record<string, unknown>,
 ): ContextInstruction["scope"] {
   const base = ownerDir(relativePath, sourceType);
+  if (sourceType === "claude-rule") {
+    // `paths` is a list or a comma-separated string. Without it the rule
+    // loads like `.claude/CLAUDE.md` does.
+    const paths = normalizeGlobs(frontmatter.paths);
+    return paths.length > 0
+      ? {
+          type: "glob",
+          patterns: paths.map((pattern) => claudeRulePattern(base, pattern)),
+        }
+      : scopeToBase(base);
+  }
   if (sourceType === "cursor") {
     // `alwaysApply: true` includes the rule everywhere; its globs are ignored.
     if (isAlwaysApplied(frontmatter)) return scopeToBase(base);
@@ -235,6 +276,25 @@ interface ParsedFile {
   parsed: ParsedMarkdown;
 }
 
+/**
+ * The frontmatter the agent reading a file sees. Claude Code ignores a
+ * rule's frontmatter that is not valid YAML and loads the rule as if it had
+ * no `paths`; Cursor reads `globs: **\/*.ts` although YAML rejects it.
+ */
+function frontmatterFor(
+  sourceType: SourceType,
+  parsed: ParsedMarkdown,
+): Record<string, unknown> {
+  return sourceType === "claude-rule" && parsed.looseFrontmatter
+    ? {}
+    : parsed.frontmatter;
+}
+
+/** Config files whose `@path` imports Claude Code expands. */
+function isClaudeMemory(sourceType: SourceType): boolean {
+  return sourceType === "claude" || sourceType === "claude-rule";
+}
+
 function buildInstructions(
   file: ParsedFile,
   agents: AgentType[],
@@ -242,15 +302,18 @@ function buildInstructions(
   extra: (instruction: MarkdownInstruction) => Partial<ContextInstruction>,
 ): ContextInstruction[] {
   return file.parsed.instructions.map((instruction, index) => {
-    const references = Array.from(
-      new Set([
-        ...extractFileReferences(instruction.content),
-        ...extractExplicitReferences(
-          instruction.linkTargets,
-          instruction.codeSpans,
-        ),
-      ]),
-    );
+    // A command names the files it creates as well as the ones it reads.
+    const references = instruction.inCodeBlock
+      ? []
+      : Array.from(
+          new Set([
+            ...extractFileReferences(instruction.content),
+            ...extractExplicitReferences(
+              instruction.linkTargets,
+              instruction.codeSpans,
+            ),
+          ]),
+        );
 
     return {
       id: `${file.relativePath}#${index}`,
@@ -465,23 +528,16 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     const parsed = isMarkdownSource(file.sourceType)
       ? parseMarkdown(content)
       : undefined;
-    const agents = agentsFor(
-      file.relativePath,
-      file.sourceType,
-      parsed?.frontmatter ?? {},
-    );
+    const frontmatter = parsed ? frontmatterFor(file.sourceType, parsed) : {};
+    const agents = agentsFor(file.relativePath, file.sourceType, frontmatter);
 
     if (parsed) {
-      const scope = computeScope(
-        file.relativePath,
-        file.sourceType,
-        parsed.frontmatter,
-      );
+      const scope = computeScope(file.relativePath, file.sourceType, frontmatter);
       const parsedFile = { ...file, parsed };
       parsedFiles.set(file.relativePath, parsedFile);
       instructions.push(
         ...buildInstructions(parsedFile, agents, scope, (instruction) =>
-          file.sourceType === "claude"
+          isClaudeMemory(file.sourceType)
             ? replacedByImports(file.relativePath, instruction)
             : {},
         ),
@@ -526,17 +582,17 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
     return file;
   };
 
-  // Claude Code expands `@path` imports in its CLAUDE.md files, and in the
-  // files those import, into its context. A CLAUDE.md that only says
-  // `@AGENTS.md` gives Claude Code everything Codex reads.
+  // Claude Code expands `@path` imports in its CLAUDE.md files and rules,
+  // and in the files those import, into its context. A CLAUDE.md that only
+  // says `@AGENTS.md` gives Claude Code everything Codex reads.
   const importedInstructions: ContextInstruction[] = [];
   for (const source of sources) {
     const importer = parsedFiles.get(source.relativePath);
-    if (source.sourceType !== "claude" || !importer) continue;
+    if (!isClaudeMemory(source.sourceType) || !importer) continue;
     const scope = computeScope(
       source.relativePath,
       source.sourceType,
-      importer.parsed.frontmatter,
+      frontmatterFor(source.sourceType, importer.parsed),
     );
     const loaded = new Set([source.relativePath]);
     const follow = async (

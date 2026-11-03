@@ -246,7 +246,13 @@ const MANAGER_WORD = /^(?:npm|pnpm|yarn|bun)$/;
  * Once the text changes directory, the commands after it run against
  * another package.json.
  */
-const CHANGE_DIRECTORY_PATTERN = /(?<![\w./-])(?:cd|pushd)\s+[^\s`]/;
+const CHANGE_DIRECTORY_PATTERN =
+  /(?<![\w./-])(?:cd|pushd|Set-Location|Push-Location)\s+[^\s`]/;
+
+/** Whether the commands after this point in `text` run in another directory. */
+export function changesDirectory(text: string): boolean {
+  return CHANGE_DIRECTORY_PATTERN.test(text);
+}
 
 function cleanWord(word: string): string {
   return word.replace(/^["'(]+/, "").replace(/["'.,;:!?)\]}]+$/, "");

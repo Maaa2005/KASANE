@@ -5,6 +5,8 @@ export interface SplitFrontmatter {
   body: string;
   /** Number of lines before `body` starts in the original content. */
   lineOffset: number;
+  /** The block is not valid YAML; `data` was read line by line instead. */
+  loose: boolean;
 }
 
 const OPEN = /^---[ \t]*$/;
@@ -54,7 +56,12 @@ function parseLoose(block: string): Record<string, unknown> {
  */
 export function splitFrontmatter(content: string): SplitFrontmatter {
   const text = content.startsWith("﻿") ? content.slice(1) : content;
-  const none: SplitFrontmatter = { data: {}, body: text, lineOffset: 0 };
+  const none: SplitFrontmatter = {
+    data: {},
+    body: text,
+    lineOffset: 0,
+    loose: false,
+  };
 
   const lines = text.split("\n");
   if (lines.length < 2 || !OPEN.test(lines[0].replace(/\r$/, ""))) {
@@ -76,6 +83,7 @@ export function splitFrontmatter(content: string): SplitFrontmatter {
     data: {},
     body,
     lineOffset: closeIndex + 1,
+    loose: false,
   };
 
   if (block.trim() === "") return stripped;
@@ -86,7 +94,7 @@ export function splitFrontmatter(content: string): SplitFrontmatter {
   } catch {
     const loose = parseLoose(block);
     return Object.keys(loose).length > 0
-      ? { ...stripped, data: loose }
+      ? { ...stripped, data: loose, loose: true }
       : none;
   }
 

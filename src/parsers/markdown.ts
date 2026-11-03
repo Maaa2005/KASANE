@@ -1,6 +1,7 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import { splitFrontmatter } from "./frontmatter.js";
+import { commandsInCodeBlock } from "./code-block.js";
 
 export interface MarkdownInstruction {
   content: string;
@@ -14,10 +15,17 @@ export interface MarkdownInstruction {
   imports: string[];
   /** Whether the instruction is nothing but `@path` imports. */
   importsOnly: boolean;
+  /** Whether the instruction is a command written in a code block. */
+  inCodeBlock: boolean;
 }
 
 export interface ParsedMarkdown {
   frontmatter: Record<string, unknown>;
+  /**
+   * The frontmatter is not valid YAML and was read line by line instead,
+   * as Cursor reads it. Claude Code ignores such frontmatter.
+   */
+  looseFrontmatter: boolean;
   body: string;
   instructions: MarkdownInstruction[];
   /** Every Claude Code `@path` import in the file, headings included. */
@@ -27,6 +35,8 @@ export interface ParsedMarkdown {
 interface MdNode {
   type: string;
   value?: string;
+  /** The info string's first word on a `code` node. */
+  lang?: string | null;
   url?: string;
   identifier?: string;
   children?: MdNode[];
@@ -43,12 +53,14 @@ interface MdNode {
  * its items is also visited as an instruction in its own right. Including it
  * here would splice every child's text into the parent instruction, which
  * inflates token counts and makes duplicate detection and reference
- * extraction compare text that never appears together in the file.
+ * extraction compare text that never appears together in the file. A code
+ * block in a list item is left out for the same reason: its commands become
+ * instructions of their own.
  */
 function ownChildren(node: MdNode): MdNode[] {
   const children = Array.isArray(node.children) ? node.children : [];
   return node.type === "listItem"
-    ? children.filter((child) => child.type !== "list")
+    ? children.filter((child) => child.type !== "list" && child.type !== "code")
     : children;
 }
 
@@ -187,8 +199,42 @@ function textWithoutImports(node: MdNode): string {
   return ownChildren(node).map(textWithoutImports).join("");
 }
 
+/**
+ * One instruction per command in a code block. Each is written as inline
+ * code, so the rules read it as a command the way they read `pnpm test` in
+ * a sentence; normalizing drops the backticks, so the same command in a
+ * list item of one file and a code block of another compares equal. Paths in
+ * a command are not references: a command names the files it creates too.
+ */
+function codeBlockInstructions(
+  lang: string | null | undefined,
+  value: string,
+  position: NonNullable<MdNode["position"]>,
+  lineOffset: number,
+): MarkdownInstruction[] {
+  // A fenced block starts with its opening fence; an indented one has none.
+  const spanLines = position.end.line - position.start.line + 1;
+  const valueLines = value === "" ? 0 : value.split("\n").length;
+  const firstLine =
+    position.start.line + lineOffset + (spanLines > valueLines ? 1 : 0);
+
+  return commandsInCodeBlock(lang, value, firstLine).map((command) => ({
+    // A backtick in the command would end the code span early.
+    content: command.command.includes("`")
+      ? command.command
+      : `\`${command.command}\``,
+    lineStart: command.lineStart,
+    lineEnd: command.lineEnd,
+    linkTargets: [],
+    codeSpans: [],
+    imports: [],
+    importsOnly: false,
+    inCodeBlock: true,
+  }));
+}
+
 export function parseMarkdown(content: string): ParsedMarkdown {
-  const { data, body, lineOffset } = splitFrontmatter(content);
+  const { data, body, lineOffset, loose } = splitFrontmatter(content);
 
   const tree = unified().use(remarkParse).parse(body) as unknown as MdNode;
   const instructions: MarkdownInstruction[] = [];
@@ -218,8 +264,14 @@ export function parseMarkdown(content: string): ParsedMarkdown {
           imports,
           importsOnly:
             imports.length > 0 && textWithoutImports(node).trim() === "",
+          inCodeBlock: false,
         });
       }
+    }
+    if (node.type === "code" && node.position && typeof node.value === "string") {
+      instructions.push(
+        ...codeBlockInstructions(node.lang, node.value, node.position, lineOffset),
+      );
     }
     // Nested lists are excluded from the parent's text but still visited,
     // so each child item becomes its own instruction exactly once.
@@ -237,6 +289,7 @@ export function parseMarkdown(content: string): ParsedMarkdown {
 
   return {
     frontmatter: data,
+    looseFrontmatter: loose,
     body,
     instructions,
     imports,

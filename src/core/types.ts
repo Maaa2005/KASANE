@@ -3,6 +3,8 @@ export type AgentType = "codex" | "claude" | "cursor" | "gemini" | "copilot";
 export type SourceType =
   | "agents"
   | "claude"
+  /** A Claude Code rule in a `.claude/rules/` directory. */
+  | "claude-rule"
   | "cursor"
   | "gemini"
   | "copilot"

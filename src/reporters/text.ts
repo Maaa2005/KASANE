@@ -4,6 +4,7 @@ import { redactSecrets } from "../utils/secrets.js";
 const SOURCE_TYPE_LABELS: Record<string, string> = {
   agents: "AGENTS.md",
   claude: "CLAUDE.md",
+  "claude-rule": "Claude Code rule",
   cursor: "Cursor rule",
   gemini: "GEMINI.md",
   copilot: "Copilot instructions",

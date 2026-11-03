@@ -5,6 +5,10 @@ import ignore from "ignore";
 import type { SourceType } from "./types.js";
 
 const CONFIG_PATTERNS: Array<{ pattern: string; sourceType: SourceType }> = [
+  // Claude Code reads every `.md` file under `.claude/rules/`, recursively,
+  // and a nested `.claude/rules/` for work in its subtree. First, so that a
+  // `CLAUDE.md` in there is taken as the rule it is.
+  { pattern: "**/.claude/rules/**/*.md", sourceType: "claude-rule" },
   { pattern: "**/AGENTS.md", sourceType: "agents" },
   { pattern: "**/CLAUDE.md", sourceType: "claude" },
   { pattern: "**/CLAUDE.local.md", sourceType: "claude" },

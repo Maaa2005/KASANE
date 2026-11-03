@@ -8,6 +8,25 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code rules in `.claude/rules/` (every `.md` file, recursively, at
+  any depth). A rule without `paths` frontmatter reaches what
+  `.claude/CLAUDE.md` reaches; one with `paths` reaches matching files, with
+  patterns resolved gitignore-style from the directory holding its `.claude`
+  folder. Rules show as "Claude Code rule" (`sourceType: "claude-rule"`) and
+  their `@path` imports are expanded.
+- Commands in shell code blocks are compared by `diff` and `explain` and
+  checked by KASANE001, KASANE003, KASANE004 and KASANE006, one instruction
+  per command. Prompts, comments, continued lines and heredoc bodies are
+  handled; a block without a language is read only when every line starts
+  with a known program.
+
+### Changed
+
+- A code block inside a list item is no longer part of the item's text; its
+  commands are instructions of their own.
+
 ## [0.3.1] - 2026-10-23
 
 ### Changed
