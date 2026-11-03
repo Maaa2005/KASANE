@@ -97,6 +97,38 @@ describe("Claude Code .claude/rules", () => {
     expect(await claudeInstructions(repo, "src/config.json")).toEqual([]);
   });
 
+  it("matches dotfiles and dot-directories, as gitignore-style patterns do", async () => {
+    const repo = makeRepo({
+      ".claude/rules/ci.md": rule('"*.yml"', "- Pin actions by commit."),
+    });
+
+    expect(await claudeInstructions(repo, ".github/workflows/ci.yml")).toEqual([
+      "Pin actions by commit.",
+    ]);
+  });
+
+  it("reads the base directory of a nested rule literally", async () => {
+    const repo = makeRepo({
+      "app/[id]/.claude/rules/page.md": rule('"*.tsx"', "- Await params."),
+    });
+
+    expect(await claudeInstructions(repo, "app/[id]/page.tsx")).toEqual(["Await params."]);
+    expect(await claudeInstructions(repo, "app/i/page.tsx")).toEqual([]);
+  });
+
+  it("checks a scoped rule's commands against the package its paths point into", async () => {
+    const repo = makeRepo({
+      "package.json": JSON.stringify({ scripts: { test: "vitest" } }),
+      "packages/web/package.json": JSON.stringify({ scripts: { dev: "vite" } }),
+      ".claude/rules/web.md": rule('"packages/web/**"', "```bash\npnpm dev\npnpm test\npnpm nope\n```"),
+    });
+    const result = await analyzeRepository(repo);
+
+    expect(
+      result.diagnostics.filter((d) => d.ruleId === "KASANE003").map((d) => d.metadata?.script),
+    ).toEqual(["nope"]);
+  });
+
   it("accepts paths as a comma-separated string with brace expansion", async () => {
     const repo = makeRepo({
       ".claude/rules/ts.md": rule('"src/**/*.{ts,tsx}, lib/**/*.ts"', "- Use strict types."),

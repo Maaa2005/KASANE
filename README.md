@@ -229,6 +229,10 @@ analysis**. The following are intentionally out of scope for now:
 - User-level Claude Code files (`~/.claude/CLAUDE.md`, `~/.claude/rules/`)
   and rules symlinked from outside the repository. Claude Code loads the
   latter only after you approve them
+- Output in a shell code block without prompts. `pwd` followed by
+  `/home/me/project` reads as two commands; write output in a `console`
+  block or after `$ ` prompts. A comment such as `# Don't do this:` does
+  not change how the command under it is read
 - `AGENTS.md` for Claude Code and Copilot. Claude Code reads it only when
   there is no `CLAUDE.md`, and Copilot reads only the one nearest the
   target file. Neither rule is modeled, so `AGENTS.md` is counted for

@@ -82,11 +82,11 @@ export function resolveEffectiveContext(
       ? target.relativePath
       : path.posix.dirname(target.relativePath)
     : undefined;
-  const matchesGlob = (pattern: string): boolean => {
+  const matchesGlob = (pattern: string, dot: boolean): boolean => {
     if (!target) return true;
-    if (!target.isDirectory) return minimatch(target.relativePath, pattern);
+    if (!target.isDirectory) return minimatch(target.relativePath, pattern, { dot });
     if (target.relativePath === ".") return true;
-    return minimatch(target.relativePath, pattern, { partial: true });
+    return minimatch(target.relativePath, pattern, { partial: true, dot });
   };
 
   const inScope = (instruction: ContextInstruction): boolean => {
@@ -95,7 +95,8 @@ export function resolveEffectiveContext(
     if (instruction.scope.type === "directory") {
       return isAncestorDir(instruction.scope.patterns[0], targetDir);
     }
-    return instruction.scope.patterns.some(matchesGlob);
+    const dot = instruction.scope.dot === true;
+    return instruction.scope.patterns.some((pattern) => matchesGlob(pattern, dot));
   };
 
   // Instructions loaded through `@path` imports follow each file's own.

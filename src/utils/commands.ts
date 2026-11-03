@@ -457,6 +457,8 @@ const NEGATED_MANAGER_PATTERNS = [
 const GENERIC_NPM_PATTERNS = [
   /\bnpm\s+(?:registry|packages?|modules?|scripts?|org(?:anization)?|account|scope|ecosystem|page|badge)\b/g,
   /\b(?:on|from)\s+(?:the\s+)?npm\b(?!\s+(?:install|i|ci|run|test|exec|start)\b)/g,
+  // "npm install -g pnpm" installs the manager to use, not npm's packages.
+  /\bnpm(?=\s+(?:install|i|add)\s+(?:-\S+\s+)*(?:pnpm|yarn|bun)(?![\w-]))/g,
   // "Publish the package to npm", but not "switch to npm".
   /(?<=\b(?:publish|publishes|published|publishing|release|releases|released|releasing|upload|uploads|uploaded|uploading|push|pushes|pushed|pushing)\b[^.;:!?\n]{0,40}?\bto\s+(?:the\s+)?)npm\b/gi,
 ];

@@ -24,8 +24,17 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ### Changed
 
-- A code block inside a list item is no longer part of the item's text; its
-  commands are instructions of their own.
+- A shell code block inside a list item is no longer part of the item's
+  text; its commands are instructions of their own. Other code blocks stay
+  in the item's text.
+- KASANE001 no longer reports the same instruction in sibling directories
+  that never load together (`packages/a/AGENTS.md` and
+  `packages/b/AGENTS.md`).
+- KASANE003 checks the commands of a glob-scoped rule (Cursor `globs`,
+  Claude Code `paths`) against the package its globs point into as well, so
+  `paths: packages/web/**` in a root rule can run `packages/web` scripts.
+- `npm install -g pnpm` (or yarn, bun) counts as naming the manager it
+  installs, not npm, for KASANE004 and `diff`.
 
 ## [0.3.1] - 2026-10-23
 

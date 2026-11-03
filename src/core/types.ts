@@ -80,6 +80,12 @@ export interface ContextInstruction {
      * extglob syntax such as `@(a|b)` survives).
      */
     patterns: string[];
+    /**
+     * Glob patterns also match dotfiles and dot-directories, as the
+     * gitignore-style `paths` of a Claude Code rule do (`*.yml` matches
+     * `.github/workflows/ci.yml`).
+     */
+    dot?: boolean;
   };
   content: string;
   normalizedContent: string;

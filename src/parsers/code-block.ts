@@ -46,11 +46,14 @@ const SESSION_LANGUAGES = new Set([
   "bash-session",
 ]);
 
-/** `$ npm test`, `PS C:\repo> npm test`, `C:\repo>npm test`. */
+/**
+ * `$ npm test`, `PS C:\repo> npm test`, `C:\repo>npm test`. A cmd prompt
+ * has no space before its `>`, which tells it from `C:\x.exe > out.txt`.
+ */
 const PROMPTS: Record<Dialect, RegExp> = {
   posix: /^\$(?:\s+|$)/,
   powershell: /^(?:PS(?:\s[^>]*)?>\s*|\$(?:\s+|$))/,
-  cmd: /^(?:[A-Za-z]:\\[^>]*>\s*|\$(?:\s+|$))/,
+  cmd: /^(?:[A-Za-z]:\\(?:[^>]*\S)?>\s*|\$(?:\s+|$))/,
 };
 
 const COMMENTS: Record<Dialect, RegExp> = {
@@ -59,8 +62,11 @@ const COMMENTS: Record<Dialect, RegExp> = {
   cmd: /^(?:@?rem(?:\s|$)|::)/i,
 };
 
-/** The character that continues a command on the next line. */
-const CONTINUATIONS: Record<Dialect, string> = {
+/**
+ * The character that escapes the next one, and so continues a command on
+ * the next line when it ends one.
+ */
+const ESCAPES: Record<Dialect, string> = {
   posix: "\\",
   powershell: "`",
   cmd: "^",
@@ -69,8 +75,8 @@ const CONTINUATIONS: Record<Dialect, string> = {
 /** A pipe or `&&` / `||` at the end of a line continues the command. */
 const TRAILING_OPERATOR = /(?:&&|\|\||\|)$/;
 
-/** `cat <<EOF`, `<<-'EOF'`; `<<<` is a here-string on the same line. */
-const HEREDOC_PATTERN = /(?<!<)<<-?[ \t]*(["']?)([A-Za-z_][\w.-]*)\1/;
+/** The delimiter after `<<` in `cat <<EOF` or `cat <<-'EOF'`. */
+const HEREDOC_DELIMITER = /^<<-?[ \t]*(["']?)([A-Za-z_][\w.-]*)\1/;
 /** A PowerShell here-string opens with `@"` or `@'` at the end of a line. */
 const HERE_STRING_PATTERN = /@(["'])$/;
 
@@ -154,37 +160,75 @@ function languageOf(lang: string | null | undefined): string {
 }
 
 /**
- * Drops a `# comment` that starts a word outside quotes. `#` inside a word
- * (`$#`, `url#anchor`) or a string is part of the command.
+ * The index of the first character of `line` outside quotes, escapes and
+ * arithmetic (`$((1 << n))`) for which `matches` is true, or -1.
  */
-function stripTrailingComment(line: string): string {
+function findUnquoted(
+  line: string,
+  dialect: Dialect,
+  matches: (index: number) => boolean,
+): number {
+  const escape = ESCAPES[dialect];
   let quote: string | null = null;
+  let arithmetic = 0;
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
     if (quote !== null) {
       if (char === quote) quote = null;
-      else if (char === "\\" && quote === '"') index += 1;
+      else if (char === escape && quote === '"') index += 1;
     } else if (char === "'" || char === '"') {
       quote = char;
-    } else if (char === "\\") {
+    } else if (char === escape) {
       index += 1;
-    } else if (char === "#" && (index === 0 || /\s/.test(line[index - 1]))) {
-      return line.slice(0, index).trimEnd();
+    } else if (line.startsWith("((", index)) {
+      arithmetic += 1;
+      index += 1;
+    } else if (arithmetic > 0) {
+      if (line.startsWith("))", index)) {
+        arithmetic -= 1;
+        index += 1;
+      }
+    } else if (matches(index)) {
+      return index;
     }
   }
-  return line;
+  return -1;
+}
+
+/**
+ * Drops a `# comment` that starts a word outside quotes. `#` inside a word
+ * (`$#`, `url#anchor`) or a string is part of the command.
+ */
+function stripTrailingComment(line: string, dialect: Dialect): string {
+  const start = findUnquoted(
+    line,
+    dialect,
+    (index) => line[index] === "#" && (index === 0 || /\s/.test(line[index - 1])),
+  );
+  return start < 0 ? line : line.slice(0, start).trimEnd();
+}
+
+/** The delimiter of the heredoc `text` opens outside quotes and arithmetic. */
+function heredocDelimiter(text: string): string | undefined {
+  let delimiter: string | undefined;
+  findUnquoted(text, "posix", (index) => {
+    if (!text.startsWith("<<", index) || text[index - 1] === "<") return false;
+    delimiter = HEREDOC_DELIMITER.exec(text.slice(index))?.[2];
+    return delimiter !== undefined;
+  });
+  return delimiter;
 }
 
 /** The text a continued line contributes, or null when it ends the command. */
 function continuedText(text: string, dialect: Dialect): string | null {
-  if (text.endsWith(CONTINUATIONS[dialect])) return text.slice(0, -1).trimEnd();
+  if (text.endsWith(ESCAPES[dialect])) return text.slice(0, -1).trimEnd();
   return TRAILING_OPERATOR.test(text) ? text : null;
 }
 
 /** Whether `line` closes the heredoc or here-string `text` opened. */
 function bodyCloser(text: string, dialect: Dialect): ((line: string) => boolean) | null {
   if (dialect === "posix") {
-    const delimiter = HEREDOC_PATTERN.exec(text)?.[2];
+    const delimiter = heredocDelimiter(text);
     return delimiter === undefined ? null : (line) => line === delimiter;
   }
   if (dialect === "powershell") {
@@ -221,10 +265,16 @@ export function commandsInCodeBlock(
 
   const prompt = PROMPTS[dialect];
   const comment = COMMENTS[dialect];
-  const strip = dialect === "cmd" ? (line: string) => line : stripTrailingComment;
+  const strip =
+    dialect === "cmd"
+      ? (line: string) => line
+      : (line: string) => stripTrailingComment(line, dialect);
   const lines = value.split("\n").map((line) => line.replace(/\r$/, "").trim());
   const session =
     SESSION_LANGUAGES.has(language) || lines.some((line) => prompt.test(line));
+  // A transcript shows `> ` before each line that continues a command.
+  const unprompted = (line: string): string =>
+    session ? line.replace(/^>\s?/, "") : line;
 
   const commands: CodeBlockCommand[] = [];
   let index = 0;
@@ -238,6 +288,15 @@ export function commandsInCodeBlock(
       line = line.slice(match[0].length);
     }
     if (line === "" || comment.test(line)) continue;
+    // A PowerShell block comment runs from `<#` to `#>`.
+    if (dialect === "powershell" && line.startsWith("<#")) {
+      let closed = line.includes("#>");
+      while (!closed && index < lines.length) {
+        closed = lines[index].includes("#>");
+        index += 1;
+      }
+      continue;
+    }
 
     let text = strip(line);
     let lineEnd = lineStart;
@@ -248,9 +307,7 @@ export function commandsInCodeBlock(
     ) {
       text = continued;
       if (index >= lines.length) break;
-      // A transcript shows `> ` before each continued line.
-      const next = session ? lines[index].replace(/^>\s?/, "") : lines[index];
-      text = `${text} ${strip(next)}`.trim();
+      text = `${text} ${strip(unprompted(lines[index]))}`.trim();
       lineEnd = firstLine + index;
       index += 1;
     }
@@ -260,7 +317,7 @@ export function commandsInCodeBlock(
       while (index < lines.length) {
         lineEnd = firstLine + index;
         index += 1;
-        if (closes(lines[index - 1])) break;
+        if (closes(unprompted(lines[index - 1]))) break;
       }
     }
 

@@ -79,6 +79,37 @@ describe("commandsInCodeBlock", () => {
     ).toEqual(['$text = @"', "npm test"]);
   });
 
+  it("closes a heredoc in a transcript, where its lines start with >", () => {
+    expect(
+      commands("console", "$ cat <<EOF > a.txt\n> hello\n> EOF\n$ npm run lint"),
+    ).toEqual(["cat <<EOF > a.txt", "npm run lint"]);
+  });
+
+  it("does not take << in arithmetic or in a string for a heredoc", () => {
+    expect(commands("bash", "x=$((1<<n))\nnpm run lint")).toEqual([
+      "x=$((1<<n))",
+      "npm run lint",
+    ]);
+    expect(commands("bash", 'git commit -m "explain <<EOF usage"\nnpm test')).toEqual([
+      'git commit -m "explain <<EOF usage"',
+      "npm test",
+    ]);
+  });
+
+  it("does not take a redirect in a cmd block for a prompt", () => {
+    expect(commands("cmd", "C:\\tools\\gen.exe > out.txt\nnpm run lint")).toEqual([
+      "C:\\tools\\gen.exe > out.txt",
+      "npm run lint",
+    ]);
+  });
+
+  it("reads PowerShell strings and block comments by PowerShell's rules", () => {
+    expect(commands("powershell", 'echo "C:\\x\\" # npm run nope')).toEqual([
+      'echo "C:\\x\\"',
+    ]);
+    expect(commands("powershell", "<#\nnpm run nope\n#>\nnpm test")).toEqual(["npm test"]);
+  });
+
   it("reads only prompted lines of a transcript", () => {
     expect(
       commands("console", "$ npm install\nadded 5 packages\n$ npm test\n> kasane@1 test"),
@@ -167,6 +198,14 @@ describe("parseMarkdown code blocks", () => {
     expect(result.instructions.map((i) => [i.content, i.lineStart])).toEqual([
       ["Run the tests:", 1],
       ["`pnpm test`", 4],
+    ]);
+  });
+
+  it("keeps a code block without commands in a list item's text", () => {
+    const result = parseMarkdown('- @AGENTS.md\n\n  ```json\n  { "a": 1 }\n  ```\n');
+
+    expect(result.instructions.map((i) => [i.content, i.importsOnly])).toEqual([
+      ['@AGENTS.md { "a": 1 }', false],
     ]);
   });
 

@@ -28,6 +28,29 @@ describe("duplicateInstructionRule (KASANE001)", () => {
     expect(await duplicateInstructionRule.run(context)).toEqual([]);
   });
 
+  it("does not flag the same instruction in sibling directories that never load together", async () => {
+    const scope = (dir: string) => ({ type: "directory" as const, patterns: [dir] });
+    const context = makeContext({
+      instructions: [
+        makeInstruction({ relativePath: "packages/a/AGENTS.md", content: "`pnpm test`", scope: scope("packages/a") }),
+        makeInstruction({ relativePath: "packages/b/AGENTS.md", content: "`pnpm test`", scope: scope("packages/b") }),
+      ],
+    });
+
+    expect(await duplicateInstructionRule.run(context)).toEqual([]);
+  });
+
+  it("flags the same instruction in a directory and one inside it", async () => {
+    const context = makeContext({
+      instructions: [
+        makeInstruction({ relativePath: "packages/AGENTS.md", content: "`pnpm test`", scope: { type: "directory", patterns: ["packages"] } }),
+        makeInstruction({ relativePath: "packages/a/AGENTS.md", content: "`pnpm test`", scope: { type: "directory", patterns: ["packages/a"] } }),
+      ],
+    });
+
+    expect(await duplicateInstructionRule.run(context)).toHaveLength(1);
+  });
+
   it("does not flag distinct instructions", async () => {
     const context = makeContext({
       instructions: [

@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { escape } from "minimatch";
 import { discoverConfigFiles, resolveFileInside } from "./discover.js";
 import { aliasSourcePaths } from "./aliases.js";
 import {
@@ -198,7 +199,7 @@ function claudeRuleBaseDir(relativePath: string): string {
  * Claude Code matches it gitignore-style against the rule's base directory:
  * a pattern without a `/` (`*.md`) matches at any depth, a leading `/`
  * (`/*.md`) anchors it to the base, and any other pattern is relative to
- * the base.
+ * the base. The base is a literal path: `app/[id]` is not a bracket glob.
  */
 function claudeRulePattern(base: string, pattern: string): string {
   const relative = pattern.startsWith("/")
@@ -206,7 +207,9 @@ function claudeRulePattern(base: string, pattern: string): string {
     : pattern.includes("/")
       ? pattern.replace(/^\.\//, "")
       : `**/${pattern}`;
-  return base === "." ? relative : `${base}/${relative}`;
+  return base === "."
+    ? relative
+    : `${escape(base, { windowsPathsNoEscape: true })}/${relative}`;
 }
 
 /**
@@ -244,6 +247,7 @@ function computeScope(
       ? {
           type: "glob",
           patterns: paths.map((pattern) => claudeRulePattern(base, pattern)),
+          dot: true,
         }
       : scopeToBase(base);
   }
@@ -476,14 +480,45 @@ async function packageScriptsFor(
     current = path.posix.dirname(current);
   }
 
-  const found = (await Promise.all(chain)).filter(
-    (info): info is PackageScripts => info !== null,
-  );
+  return mergePackageScripts(await Promise.all(chain));
+}
+
+/** Every script and dependency of the packages found; null if none was. */
+function mergePackageScripts(
+  infos: Array<PackageScripts | null>,
+): PackageScripts | null {
+  const found = infos.filter((info): info is PackageScripts => info !== null);
   if (found.length === 0) return null;
   return {
     scripts: Array.from(new Set(found.flatMap((info) => info.scripts))),
     dependencies: Array.from(new Set(found.flatMap((info) => info.dependencies))),
   };
+}
+
+/** Characters that make a path segment a pattern rather than a name. */
+const GLOB_SEGMENT = /[*?[\]{}()!+@]/;
+
+/**
+ * The directories a config file's commands may run in. A file reaches the
+ * directory it belongs to, but a rule scoped by globs is read for work where
+ * its globs point, so `paths: packages/web/**` in a root rule runs its
+ * commands against `packages/web/package.json`: each glob's leading literal
+ * directory is used.
+ */
+function commandDirs(
+  base: string,
+  scope: ContextInstruction["scope"] | undefined,
+): string[] {
+  if (scope?.type !== "glob") return [base];
+  const dirs = scope.patterns.map((pattern) => {
+    const fixed: string[] = [];
+    for (const segment of pattern.split("/").slice(0, -1)) {
+      if (GLOB_SEGMENT.test(segment)) break;
+      fixed.push(segment);
+    }
+    return fixed.length > 0 ? fixed.join("/") : ".";
+  });
+  return Array.from(new Set(dirs));
 }
 
 export async function buildAnalysisContext(root: string): Promise<AnalysisContext> {
@@ -522,6 +557,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
       ? { importsOnly: true }
       : {};
 
+  const scopes = new Map<string, ContextInstruction["scope"]>();
   discovered.forEach((file, fileIndex) => {
     const content = contents[fileIndex];
     const estimatedTokens = estimateTokens(content);
@@ -533,6 +569,7 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
 
     if (parsed) {
       const scope = computeScope(file.relativePath, file.sourceType, frontmatter);
+      scopes.set(file.relativePath, scope);
       const parsedFile = { ...file, parsed };
       parsedFiles.set(file.relativePath, parsedFile);
       instructions.push(
@@ -630,12 +667,16 @@ export async function buildAnalysisContext(root: string): Promise<AnalysisContex
   const packageScripts = new Map<string, PackageScripts | null>();
   for (const file of discovered) {
     if (!isMarkdownSource(file.sourceType)) continue;
+    const dirs = commandDirs(
+      ownerDir(file.relativePath, file.sourceType),
+      scopes.get(file.relativePath),
+    );
     packageScripts.set(
       file.relativePath,
-      await packageScriptsFor(
-        absoluteRoot,
-        ownerDir(file.relativePath, file.sourceType),
-        packageJsonCache,
+      mergePackageScripts(
+        await Promise.all(
+          dirs.map((dir) => packageScriptsFor(absoluteRoot, dir, packageJsonCache)),
+        ),
       ),
     );
   }

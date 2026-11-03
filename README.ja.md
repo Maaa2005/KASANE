@@ -223,6 +223,10 @@ KASANEは**静的解析で再現できる範囲**のみを対象とします。�
 - ユーザー単位のClaude Codeのファイル(`~/.claude/CLAUDE.md`・
   `~/.claude/rules/`)と、リポジトリの外からsymlinkしたルール。後者は
   Claude Codeでも承認した後にだけ読まれます
+- プロンプトの無いシェルのコードブロック内の出力。`pwd`の次の行の
+  `/home/me/project`は2つ目のコマンドとして読みます。出力は`console`の
+  ブロックか`$ `付きの書き方で書いてください。`# これはやらない:`のような
+  コメントも、その下のコマンドの読み方を変えません
 - Claude CodeとCopilotにとっての`AGENTS.md`。Claude Codeは`CLAUDE.md`が
   無いときだけ読み、Copilotは対象ファイルに最も近い1つだけを読みます。
   どちらも再現しないため、`AGENTS.md`はCodexとCursorの分だけ数えます。

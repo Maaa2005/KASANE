@@ -54,14 +54,21 @@ interface MdNode {
  * here would splice every child's text into the parent instruction, which
  * inflates token counts and makes duplicate detection and reference
  * extraction compare text that never appears together in the file. A code
- * block in a list item is left out for the same reason: its commands become
- * instructions of their own.
+ * block in a list item whose commands become instructions of their own is
+ * left out for the same reason; any other code block stays the item's text.
  */
 function ownChildren(node: MdNode): MdNode[] {
   const children = Array.isArray(node.children) ? node.children : [];
   return node.type === "listItem"
-    ? children.filter((child) => child.type !== "list" && child.type !== "code")
+    ? children.filter((child) => child.type !== "list" && !isCommandBlock(child))
     : children;
+}
+
+function isCommandBlock(node: MdNode): boolean {
+  return (
+    node.type === "code" &&
+    commandsInCodeBlock(node.lang, node.value ?? "", 1).length > 0
+  );
 }
 
 /** Nodes whose children are inline text, which already carries its spaces. */
