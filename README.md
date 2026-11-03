@@ -171,7 +171,7 @@ directory, `--path` outside the repository), `3` the analysis failed,
 | Agent          | File(s)                                                             |
 | -------------- | ---------------------------------------------------------------------- |
 | OpenAI Codex   | `AGENTS.md`                                                          |
-| Claude Code    | `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`                  |
+| Claude Code    | `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/rules/**/*.md` |
 | Cursor         | `.cursor/rules/**/*.mdc`, `.cursorrules`, `AGENTS.md`                |
 | Gemini CLI     | `GEMINI.md`                                                          |
 | GitHub Copilot | `.github/copilot-instructions.md` (repository root only)             |
@@ -187,6 +187,32 @@ with none of these is applied only when @-mentioned, and a plain `.md` file
 in `.cursor/rules` is not a rule: both are left out of `explain` and `diff`,
 but `inspect` still checks them.
 
+Claude Code rules are every `.md` file under `.claude/rules/`, read
+recursively, as [Claude Code's memory documentation](https://code.claude.com/docs/en/memory#organize-rules-with-claude/rules/)
+describes. A rule without `paths` frontmatter reaches what `.claude/CLAUDE.md`
+reaches. With `paths` (a list or a comma-separated string, `{ts,tsx}`
+included) it reaches matching files only. Patterns are relative to the
+directory holding the rule's `.claude` folder and match gitignore-style:
+`*.md` matches at any depth, `/*.md` only directly in that directory, and
+`src/**/*.ts` from that directory; dotfiles match too. A later `!pattern`
+excludes what an earlier one matched, and a pattern with a `[` that opens
+no bracket expression matches nothing. A nested `backend/.claude/rules/` applies
+to work under `backend/`. Frontmatter that is not valid YAML is ignored, as
+Claude Code ignores it, so `paths: **/*.ts` without quotes loads the rule
+everywhere.
+
+Commands in shell code blocks (`bash`, `sh`, `shell`, `zsh`, `console`,
+`powershell`, `cmd` and similar) are compared and checked like commands in
+prose, one instruction per command. A block without a language is read only
+when every line starts with a known program (`npm`, `git`, `make`, …), so
+directory trees and sample output are not taken for commands. In a
+transcript (`console`, or `$ ` prompts) only the prompted lines are commands.
+Comments are dropped, continued lines (`\`, `` ` ``, `^`) are joined, and a
+heredoc's body is skipped. A `cd` and the commands after it in the same
+block form one instruction, which KASANE003 does not check against the root
+`package.json`. Paths in commands are not checked by KASANE002, because a
+command also names the files it creates.
+
 ### Known limitations (not reproduced in v0.3.0)
 
 KASANE only reconstructs context that can be resolved by **static
@@ -199,9 +225,16 @@ analysis**. The following are intentionally out of scope for now:
   `@../…`), point into `.git/` or `node_modules/`, or name a file that is
   not Markdown or plain text (`@package.json`). Imports of `.md`, `.mdc`,
   `.markdown` and `.txt` files and of an extension-less `README` inside the
-  repository are expanded from `CLAUDE.md`, `.claude/CLAUDE.md` and
-  `CLAUDE.local.md`, up to four hops deep, and apply where the importing
-  file applies
+  repository are expanded from `CLAUDE.md`, `.claude/CLAUDE.md`,
+  `CLAUDE.local.md` and `.claude/rules/` files, up to four hops deep, and
+  apply where the importing file applies
+- User-level Claude Code files (`~/.claude/CLAUDE.md`, `~/.claude/rules/`)
+  and rules symlinked from outside the repository. Claude Code loads the
+  latter only after you approve them
+- Output in a shell code block without prompts. `pwd` followed by
+  `/home/me/project` reads as two commands; write output in a `console`
+  block or after `$ ` prompts. A comment such as `# Don't do this:` does
+  not change how the command under it is read
 - `AGENTS.md` for Claude Code and Copilot. Claude Code reads it only when
   there is no `CLAUDE.md`, and Copilot reads only the one nearest the
   target file. Neither rule is modeled, so `AGENTS.md` is counted for

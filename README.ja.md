@@ -168,7 +168,7 @@ JSON出力は既定で各設定ファイルの全文を含めません。コン�
 | エージェント   | ファイル                                                          |
 | -------------- | -------------------------------------------------------------------- |
 | OpenAI Codex   | `AGENTS.md`                                                          |
-| Claude Code    | `CLAUDE.md`、`.claude/CLAUDE.md`、`CLAUDE.local.md`                  |
+| Claude Code    | `CLAUDE.md`、`.claude/CLAUDE.md`、`CLAUDE.local.md`、`.claude/rules/**/*.md` |
 | Cursor         | `.cursor/rules/**/*.mdc`、`.cursorrules`、`AGENTS.md`                |
 | Gemini CLI     | `GEMINI.md`                                                          |
 | GitHub Copilot | `.github/copilot-instructions.md`(リポジトリ直下のみ)               |
@@ -183,6 +183,31 @@ Cursorルールは任意の深さの`.cursor/rules`から読み、Cursorのル�
 され、`.cursor/rules`内の`.md`ファイルはルールではありません。この2つは
 `explain`と`diff`には含めませんが、`inspect`では検査します。
 
+Claude Codeのルールは、`.claude/rules/`の下にある`.md`ファイルすべてです。
+[Claude Codeのメモリの説明](https://code.claude.com/docs/en/memory#organize-rules-with-claude/rules/)
+のとおり、サブフォルダも含めて読みます。`paths`フロントマターの無いルールは
+`.claude/CLAUDE.md`と同じ範囲に届きます。`paths`(リストかカンマ区切りの文字列。
+`{ts,tsx}`も可)があれば、一致するファイルだけに届きます。パターンはルールの
+`.claude`フォルダを持つディレクトリが起点で、gitignoreと同じ合わせ方です。
+`*.md`はどの深さでも一致し、`/*.md`はそのディレクトリ直下だけ、`src/**/*.ts`は
+そのディレクトリから見た位置です。隠しファイルにも一致します。後ろの
+`!パターン`は前のパターンに一致した物を外し、括弧の閉じない`[`を含む
+パターンは何にも一致しません。入れ子の`backend/.claude/rules/`は
+`backend/`の下の作業に適用します。YAMLとして正しくないフロントマターは
+Claude Codeと同じく無視するので、引用符の無い`paths: **/*.ts`はどこにでも
+届くルールになります。
+
+シェルのコードブロック(`bash`・`sh`・`shell`・`zsh`・`console`・
+`powershell`・`cmd`など)のコマンドも、文中のコマンドと同じように比べて検査
+します。1コマンドが1指示です。言語名の無いブロックは、すべての行が既知の
+プログラム(`npm`・`git`・`make`など)で始まるときだけ読みます。ディレクトリの
+木や出力例をコマンドと取り違えないためです。端末のやりとり(`console`や
+`$ `付きの行)では、`$ `の付いた行だけをコマンドとします。コメントは除き、
+継続行(`\`・`` ` ``・`^`)はつなぎ、ヒアドキュメントの中身は読み飛ばします。
+同じブロックで`cd`とその後のコマンドは1つの指示にまとめ、KASANE003はルートの
+`package.json`と照合しません。コマンド中のパスはKASANE002の対象にしません。
+コマンドは作るファイルの名前も書くためです。
+
 ### 既知の制限(v0.3.0では再現しない範囲)
 
 KASANEは**静的解析で再現できる範囲**のみを対象とします。以下は意図的に
@@ -195,7 +220,15 @@ KASANEは**静的解析で再現できる範囲**のみを対象とします。�
   `@../…`)、`.git/`・`node_modules/`の中を指すもの、Markdown・テキスト以外の
   ファイル(`@package.json`)。リポジトリ内の`.md`・`.mdc`・`.markdown`・`.txt`と
   拡張子なしの`README`へのインポートは、`CLAUDE.md`・`.claude/CLAUDE.md`・
-  `CLAUDE.local.md`から最大4段まで展開し、インポート元と同じ範囲に適用します
+  `CLAUDE.local.md`・`.claude/rules/`のファイルから最大4段まで展開し、
+  インポート元と同じ範囲に適用します
+- ユーザー単位のClaude Codeのファイル(`~/.claude/CLAUDE.md`・
+  `~/.claude/rules/`)と、リポジトリの外からsymlinkしたルール。後者は
+  Claude Codeでも承認した後にだけ読まれます
+- プロンプトの無いシェルのコードブロック内の出力。`pwd`の次の行の
+  `/home/me/project`は2つ目のコマンドとして読みます。出力は`console`の
+  ブロックか`$ `付きの書き方で書いてください。`# これはやらない:`のような
+  コメントも、その下のコマンドの読み方を変えません
 - Claude CodeとCopilotにとっての`AGENTS.md`。Claude Codeは`CLAUDE.md`が
   無いときだけ読み、Copilotは対象ファイルに最も近い1つだけを読みます。
   どちらも再現しないため、`AGENTS.md`はCodexとCursorの分だけ数えます。

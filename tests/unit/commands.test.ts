@@ -10,6 +10,12 @@ describe("extractMentionedManagers", () => {
     expect(extractMentionedManagers("Use pnpm for scripts.")).toEqual(["pnpm"]);
   });
 
+  it("counts npm installing another manager as that manager", () => {
+    expect(extractMentionedManagers("`npm install -g pnpm@9`")).toEqual(["pnpm"]);
+    expect(extractMentionedManagers("`npm i --global yarn`")).toEqual(["yarn"]);
+    expect(extractMentionedManagers("`npm i -D yarn-deduplicate`")).toContain("npm");
+  });
+
   it("ignores a manager named only to forbid it", () => {
     expect(extractMentionedManagers("Do not use npm; use pnpm.")).toEqual([
       "pnpm",

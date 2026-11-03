@@ -3,6 +3,8 @@ export type AgentType = "codex" | "claude" | "cursor" | "gemini" | "copilot";
 export type SourceType =
   | "agents"
   | "claude"
+  /** A Claude Code rule in a `.claude/rules/` directory. */
+  | "claude-rule"
   | "cursor"
   | "gemini"
   | "copilot"
@@ -78,11 +80,23 @@ export interface ContextInstruction {
      * extglob syntax such as `@(a|b)` survives).
      */
     patterns: string[];
+    /**
+     * Glob patterns are matched gitignore-style, as the `paths` of a Claude
+     * Code rule are: they match dotfiles (`*.yml` matches
+     * `.github/workflows/ci.yml`), and a later `!pattern` excludes what an
+     * earlier pattern matched.
+     */
+    gitignore?: boolean;
   };
   content: string;
   normalizedContent: string;
   estimatedTokens: number;
   references: string[];
+  /**
+   * Set on an instruction that is a command in a code block: the command as
+   * the shell reads it, without the inline-code markup `content` carries.
+   */
+  command?: string;
   /**
    * Set on a copy that reaches Claude Code through `@path` imports: the
    * CLAUDE.md whose imports load it, directly or through other imported

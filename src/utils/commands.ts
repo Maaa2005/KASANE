@@ -246,7 +246,13 @@ const MANAGER_WORD = /^(?:npm|pnpm|yarn|bun)$/;
  * Once the text changes directory, the commands after it run against
  * another package.json.
  */
-const CHANGE_DIRECTORY_PATTERN = /(?<![\w./-])(?:cd|pushd)\s+[^\s`]/;
+const CHANGE_DIRECTORY_PATTERN =
+  /(?<![\w./-])(?:cd|pushd|Set-Location|Push-Location)\s+[^\s`]/;
+
+/** Whether the commands after this point in `text` run in another directory. */
+export function changesDirectory(text: string): boolean {
+  return CHANGE_DIRECTORY_PATTERN.test(text);
+}
 
 function cleanWord(word: string): string {
   return word.replace(/^["'(]+/, "").replace(/["'.,;:!?)\]}]+$/, "");
@@ -359,13 +365,21 @@ function extractFromSegment(segment: string, inCode: boolean): DetectedCommand[]
  * `--filter`, `--workspace`), tolerates a missing script (`--if-present`)
  * or carries a flag this parser does not know is skipped: a missed command
  * is cheaper than an error for a script that exists.
+ *
+ * With `command`, the whole text is a command from a code block and is read
+ * as code even where it has backticks of its own (`` echo `date` ``).
  */
-export function extractPackageManagerCommands(text: string): DetectedCommand[] {
+export function extractPackageManagerCommands(
+  text: string,
+  { command = false }: { command?: boolean } = {},
+): DetectedCommand[] {
   const cd = CHANGE_DIRECTORY_PATTERN.exec(text);
   const checked = cd ? text.slice(0, cd.index) : text;
 
-  const codeSpans = Array.from(checked.matchAll(CODE_SPAN_PATTERN), (m) => m[1]);
-  const prose = checked.replace(CODE_SPAN_PATTERN, "\n");
+  const codeSpans = command
+    ? [checked]
+    : Array.from(checked.matchAll(CODE_SPAN_PATTERN), (m) => m[1]);
+  const prose = command ? "" : checked.replace(CODE_SPAN_PATTERN, "\n");
 
   const results: DetectedCommand[] = [];
   for (const span of codeSpans) {
@@ -451,6 +465,8 @@ const NEGATED_MANAGER_PATTERNS = [
 const GENERIC_NPM_PATTERNS = [
   /\bnpm\s+(?:registry|packages?|modules?|scripts?|org(?:anization)?|account|scope|ecosystem|page|badge)\b/g,
   /\b(?:on|from)\s+(?:the\s+)?npm\b(?!\s+(?:install|i|ci|run|test|exec|start)\b)/g,
+  // "npm install -g pnpm" installs the manager to use, not npm's packages.
+  /\bnpm(?=\s+(?:install|i|add)\s+(?:-\S+\s+)*(?:pnpm|yarn|bun)(?![\w-]))/g,
   // "Publish the package to npm", but not "switch to npm".
   /(?<=\b(?:publish|publishes|published|publishing|release|releases|released|releasing|upload|uploads|uploaded|uploading|push|pushes|pushed|pushing)\b[^.;:!?\n]{0,40}?\bto\s+(?:the\s+)?)npm\b/gi,
 ];
