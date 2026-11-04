@@ -3,10 +3,14 @@ export type AgentType = "codex" | "claude" | "cursor" | "gemini" | "copilot";
 export type SourceType =
   | "agents"
   | "claude"
+  /** A Claude Code rule in a `.claude/rules/` directory. */
+  | "claude-rule"
   | "cursor"
   | "gemini"
   | "copilot"
-  | "mcp";
+  | "mcp"
+  /** A file Claude Code reads only because a CLAUDE.md imports it. */
+  | "import";
 
 export interface ContextSource {
   id: string;
@@ -76,17 +80,49 @@ export interface ContextInstruction {
      * extglob syntax such as `@(a|b)` survives).
      */
     patterns: string[];
+    /**
+     * Glob patterns are matched gitignore-style, as the `paths` of a Claude
+     * Code rule are: they match dotfiles (`*.yml` matches
+     * `.github/workflows/ci.yml`), and a later `!pattern` excludes what an
+     * earlier pattern matched.
+     */
+    gitignore?: boolean;
   };
   content: string;
   normalizedContent: string;
   estimatedTokens: number;
   references: string[];
+  /**
+   * Set on an instruction that is a command in a code block: the command as
+   * the shell reads it, without the inline-code markup `content` carries.
+   */
+  command?: string;
+  /**
+   * Set on a copy that reaches Claude Code through `@path` imports: the
+   * CLAUDE.md whose imports load it, directly or through other imported
+   * files. `source` is still the imported file, and `id` that of the
+   * instruction there.
+   */
+  importedBy?: string;
+  /**
+   * The instruction is nothing but `@path` imports that KASANE follows, so
+   * the files they name stand in for it in Claude Code's context.
+   */
+  importsOnly?: boolean;
 }
 
 export interface AnalysisContext {
   repository: string;
   sources: ContextSource[];
   instructions: ContextInstruction[];
+  /**
+   * What Claude Code loads through `@path` imports in its CLAUDE.md files:
+   * a copy of each imported instruction, scoped like the file that imports
+   * it. Kept apart from `instructions` so each file is linted once.
+   */
+  importedInstructions?: ContextInstruction[];
+  /** Imported files that are not config files of their own. */
+  importedSources?: ContextSource[];
   totalEstimatedTokens: number;
   packageJsonScripts: string[] | null;
   /** Names from dependencies and devDependencies of the root package.json. */

@@ -5,6 +5,7 @@ import { realPathOf } from "./aliases.js";
 import type {
   AgentType,
   AnalysisContext,
+  ContextInstruction,
   Diagnostic,
   EffectiveContext,
 } from "./types.js";
@@ -81,31 +82,81 @@ export function resolveEffectiveContext(
       ? target.relativePath
       : path.posix.dirname(target.relativePath)
     : undefined;
-  const matchesGlob = (pattern: string): boolean => {
+  const matchesGlob = (pattern: string, dot = false): boolean => {
     if (!target) return true;
-    if (!target.isDirectory) return minimatch(target.relativePath, pattern);
+    if (!target.isDirectory) return minimatch(target.relativePath, pattern, { dot });
     if (target.relativePath === ".") return true;
-    return minimatch(target.relativePath, pattern, { partial: true });
+    return minimatch(target.relativePath, pattern, { partial: true, dot });
   };
 
-  const instructions = context.instructions.filter((instruction) => {
-    if (!instruction.agents.includes(options.agent)) return false;
-    if (!targetDir) return true;
-    if (instruction.scope.type === "repository") return true;
-    if (instruction.scope.type === "directory") {
-      return isAncestorDir(instruction.scope.patterns[0], targetDir);
+  // The last pattern that matches a file decides, as in .gitignore. A
+  // directory gets the rule when any file under it can match, so its
+  // exclusions are not applied; without a target, any rule that can load.
+  const matchesGitignore = (patterns: string[]): boolean => {
+    if (!target || target.isDirectory) {
+      return patterns.some((pattern) => !pattern.startsWith("!") && matchesGlob(pattern, true));
     }
-    return instruction.scope.patterns.some(matchesGlob);
-  });
+    let matched = false;
+    for (const pattern of patterns) {
+      const negated = pattern.startsWith("!");
+      if (
+        negated === matched &&
+        minimatch(target.relativePath, negated ? pattern.slice(1) : pattern, { dot: true })
+      ) {
+        matched = !negated;
+      }
+    }
+    return matched;
+  };
 
-  const includedPaths = new Set(
-    instructions.map((instruction) => instruction.source.relativePath),
+  const inScope = (instruction: ContextInstruction): boolean => {
+    const { scope } = instruction;
+    if (scope.type === "glob" && scope.gitignore === true) {
+      return matchesGitignore(scope.patterns);
+    }
+    if (!targetDir) return true;
+    if (scope.type === "repository") return true;
+    if (scope.type === "directory") return isAncestorDir(scope.patterns[0], targetDir);
+    return scope.patterns.some((pattern) => matchesGlob(pattern));
+  };
+
+  // Instructions loaded through `@path` imports follow each file's own.
+  const reaching = [
+    ...context.instructions,
+    ...(context.importedInstructions ?? []),
+  ].filter(
+    (instruction) =>
+      instruction.agents.includes(options.agent) && inScope(instruction),
   );
 
-  const sources = context.sources.filter(
+  // An import line is stood in for by what it imports, and an instruction
+  // already in the list (imported by two CLAUDE.md files, or read directly
+  // as well) is kept once.
+  const seen = new Set<string>();
+  const instructions = reaching.filter((instruction) => {
+    if (instruction.importsOnly) return false;
+    if (seen.has(instruction.id)) return false;
+    seen.add(instruction.id);
+    return true;
+  });
+
+  // Every file that reaches the agent is a source, including one whose only
+  // content is an import line.
+  const includedPaths = new Set<string>();
+  const importedPaths = new Set<string>();
+  for (const instruction of reaching) {
+    includedPaths.add(instruction.source.relativePath);
+    if (instruction.importedBy !== undefined) {
+      includedPaths.add(instruction.importedBy);
+      importedPaths.add(instruction.source.relativePath);
+    }
+  }
+
+  const sources = [...context.sources, ...(context.importedSources ?? [])].filter(
     (source) =>
       includedPaths.has(source.relativePath) &&
-      source.agents.includes(options.agent),
+      (source.agents.includes(options.agent) ||
+        importedPaths.has(source.relativePath)),
   );
 
   const estimatedTokens = sources.reduce(

@@ -8,6 +8,22 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code rules in `.claude/rules/` (every `.md` file, recursively, at
+  any depth). A rule without `paths` frontmatter reaches what
+  `.claude/CLAUDE.md` reaches; one with `paths` reaches matching files, with
+  patterns resolved gitignore-style from the directory holding its `.claude`
+  folder (dotfiles match, a later `!pattern` excludes, a pattern with an
+  unclosed `[` matches nothing). Rules show as "Claude Code rule"
+  (`sourceType: "claude-rule"`) and their `@path` imports are expanded.
+- Commands in shell code blocks are compared by `diff` and `explain` and
+  checked by KASANE001, KASANE003, KASANE004 and KASANE006, one instruction
+  per command. Prompts, comments, continued lines and heredoc bodies are
+  handled; a block without a language is read only when every line starts
+  with a known program. In `--format json` such an instruction carries the
+  raw `command`.
+
 ### Security
 
 - Secret detection and masking now cover credentials in URLs
@@ -51,12 +67,22 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
 
 ### Changed
 
+- A shell code block inside a list item is no longer part of the item's
+  text; its commands are instructions of their own. Other code blocks stay
+  in the item's text.
+- KASANE001 no longer reports the same instruction in sibling directories
+  that never load together (`packages/a/AGENTS.md` and
+  `packages/b/AGENTS.md`).
+- KASANE003 checks the commands of a glob-scoped rule (Cursor `globs`,
+  Claude Code `paths`) against the package its globs point into as well, so
+  `paths: packages/web/**` in a root rule can run `packages/web` scripts.
+- `npm install -g pnpm` (or yarn, bun) counts as naming the manager it
+  installs, not npm, for KASANE004 and `diff`.
 - Updated `minimatch` to ^11. Both call sites (`--path` and Cursor `globs`
   matching) behave as before.
 - Removed `zod` from dependencies; it was never imported.
-- README: states that commands inside fenced code blocks are not checked by
-  the command rules yet, lists the rule IDs KASANE001 to KASANE007, and no
-  longer carries the internal release checklist (moved to `docs/releasing.md`).
+- README: lists the rule IDs KASANE001 to KASANE007 and no longer carries the
+  internal release checklist (moved to `docs/releasing.md`).
 - SECURITY.md: the supported version is now 0.3.x.
 
 ## [0.3.1] - 2026-10-23
