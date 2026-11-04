@@ -153,3 +153,132 @@ describe("isDependencyBinary", () => {
     expect(isDependencyBinary("test", new Set(["@playwright/test"]))).toBe(false);
   });
 });
+
+describe("extractMentionedManagers: npm in a pnpm or yarn repository", () => {
+  it.each([
+    "publish",
+    "view",
+    "audit",
+    "pack",
+    "version",
+    "login",
+    "whoami",
+    "dist-tag",
+    "deprecate",
+    "logout",
+    "token",
+    "owner",
+    "access",
+    "adduser",
+    "profile",
+    "star",
+  ])("ignores the npm-only subcommand `npm %s`", (subcommand) => {
+    const text = `Run \`npm ${subcommand} foo\` when needed.`;
+
+    expect(extractMentionedManagers(text, "pnpm")).toEqual([]);
+    expect(extractMentionedManagers(text, "yarn")).toEqual([]);
+  });
+
+  it.each([
+    "Release with `npm --registry=https://registry.npmjs.org publish`.",
+    "Release with `npm --registry https://registry.npmjs.org publish`.",
+    "Release with `npm --prefix packages/app --otp=123456 publish`.",
+    "Release with `npm -w app publish`.",
+    "Release with `npm --userconfig .npmrc --silent token list`.",
+    "Run `npm --no-git-tag-version version patch`.",
+    "Run `npm --registry=https://registry.npmjs.org token list`.",
+  ])("skips options before an npm-only subcommand: %j", (text) => {
+    expect(extractMentionedManagers(text, "pnpm")).toEqual([]);
+  });
+
+  it.each([
+    "Run `npm --registry=https://registry.npmjs.org install`.",
+    "Run `npm --prefix app run build`.",
+  ])("still reports options before a regular npm command: %j", (text) => {
+    expect(extractMentionedManagers(text, "pnpm")).toEqual(["npm"]);
+  });
+
+  it("ignores npm-only subcommands next to the manager in use", () => {
+    expect(
+      extractMentionedManagers("Install with `pnpm install`, then `npm publish`.", "pnpm"),
+    ).toEqual(["pnpm"]);
+  });
+
+  it.each([
+    "Run `npm install -g pnpm`.",
+    "Run `npm i -g yarn` first.",
+    "Install it with `npm install --global pnpm`.",
+    "npm install pnpm -g",
+    "Run `npm install pnpm --global=true`.",
+    "Run `npm install --location=global pnpm`.",
+    "Run `npm install --location global pnpm`.",
+  ])("ignores a global install through npm: %j", (text) => {
+    expect(extractMentionedManagers(text, "yarn")).toEqual([]);
+  });
+
+  it.each([
+    "Run `npm install --global=false`.",
+    "Run `npm install pkg --global-style`.",
+    "Run `npm install --location=project`.",
+    "Run `npm install --location=globalx`.",
+  ])("does not treat a non-global install as global: %j", (text) => {
+    expect(extractMentionedManagers(text, "yarn")).toEqual(["npm"]);
+  });
+
+  it.each([
+    ["Requires Node 20 and npm 10.", []],
+    ["Requires Node.js >= 20 and npm >= 10 for the build.", []],
+    ["Needs npm 10 or newer.", []],
+    ["Node 20 / npm 10 are required.", []],
+    ["Requires Node 20 and npm 10, and use pnpm.", ["pnpm"]],
+    ["Requires Node 20.11 and npm 10.", []],
+    ["Node.js >= 20.11.0 and npm >= 10", []],
+    ["Node 20.x, npm 10.x", []],
+    ["Node: 20 / npm: 10", []],
+    ["node >=20 and npm@10", []],
+    ["Requires Node.js 20.11.0 and npm@10.2.3, and use pnpm.", ["pnpm"]],
+  ])("ignores an npm version requirement: %j", (text, expected) => {
+    expect(extractMentionedManagers(text, "pnpm")).toEqual(expected);
+  });
+
+  it.each([
+    ["Run `npm install` to set up.", ["npm"]],
+    ["Use `npm run build`.", ["npm"]],
+    ["Run `npm install` (non-global) then `npm publish`.", ["npm"]],
+    ["Run `npm install -g pnpm`, then `npm test`.", ["npm"]],
+    ["Requires Node 20.11. Then run npm install.", ["npm"]],
+    ["Requires Node 20.11 and run npm install.", ["npm"]],
+    ["Node: 20. Run npm install.", ["npm"]],
+  ])("still reports real npm usage: %j", (text, expected) => {
+    expect(extractMentionedManagers(text, "pnpm")).toEqual(expected);
+  });
+
+  it("keeps npm-only subcommands as npm when no expected manager is given", () => {
+    expect(extractMentionedManagers("Run `npm publish`.")).toEqual(["npm"]);
+  });
+});
+
+describe("very long lines", () => {
+  it("scans a 120 KB line of repeated `npm ` quickly", () => {
+    const line = "npm ".repeat(30_000);
+    const started = performance.now();
+
+    extractPackageManagerCommands(line);
+    extractPackageManagerCommands(`\`${line}\``);
+    extractMentionedManagers(line, "pnpm");
+
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
+  it("still reads a command at the start of a very long line", () => {
+    const text = `Run \`pnpm run build\` ${"npm ".repeat(30_000)}`;
+
+    expect(scripts(text)).toContain("build");
+  });
+
+  it("ignores commands beyond the scanned part of a line", () => {
+    const text = `${"x".repeat(5000)} \`pnpm run late\`\n\`pnpm run early\``;
+
+    expect(scripts(text)).toEqual(["early"]);
+  });
+});

@@ -98,4 +98,36 @@ describe("packageManagerConflictRule (KASANE004)", () => {
       }),
     ).toEqual([]);
   });
+
+  describe.each(["pnpm-lock.yaml", "yarn.lock"])("in a repository with %s", (lockfile) => {
+    it.each([
+      "Release with `npm publish`.",
+      "Check the package with `npm view kasane-cli` or `npm pack`.",
+      "Run `npm audit` and `npm version patch`.",
+      "Use `npm login`, `npm whoami`, `npm dist-tag ls` and `npm deprecate`.",
+      "Install the tool with `npm install -g pnpm`.",
+      "Install the tool with `npm i -g yarn`.",
+      "Requires Node 20 and npm 10.",
+    ])("does not warn about %j", async (instruction) => {
+      expect(
+        await run({
+          "package.json": JSON.stringify({ name: "app" }),
+          [lockfile]: "",
+          "AGENTS.md": `- ${instruction}\n`,
+        }),
+      ).toEqual([]);
+    });
+
+    it("still warns about npm install", async () => {
+      const diagnostics = await run({
+        "package.json": JSON.stringify({ name: "app" }),
+        [lockfile]: "",
+        "AGENTS.md": "- Run `npm install`, then `npm publish`.\n",
+      });
+
+      expect(diagnostics.map((d) => d.metadata)).toEqual([
+        { mentioned: "npm", expected: lockfile.startsWith("pnpm") ? "pnpm" : "yarn" },
+      ]);
+    });
+  });
 });

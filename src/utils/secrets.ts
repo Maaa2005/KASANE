@@ -13,6 +13,11 @@ interface SecretPattern {
   pattern: RegExp;
   /** Extra check on the matched text, for prefixes that also start words. */
   accept?: (value: string) => boolean;
+  /**
+   * Index of a capture group holding the secret itself. Only that part is
+   * reported and masked; the rest of the match is context that finds it.
+   */
+  group?: number;
 }
 
 // A token never starts in the middle of an identifier or a hyphenated word:
@@ -23,6 +28,27 @@ const hasDigit = (value: string) => /\d/.test(value);
 
 function prefixed(name: string, body: string, flags = "g"): SecretPattern {
   return { name, pattern: new RegExp(`${START}${body}`, flags) };
+}
+
+// Passwords in URLs that are placeholders rather than credentials. Only
+// exact placeholder shapes are skipped, never by a leading `$`, `%` or digit:
+// `%40ProdPass7` (a percent-encoded `@`) and `12345` are real passwords.
+const URL_PASSWORD_PLACEHOLDERS: RegExp[] = [
+  /^\$\{[^}]*\}$/, // ${DB_PASSWORD}
+  /^\$[A-Z_][A-Z0-9_]*$/, // $DB_PASSWORD
+  /^<[^<>]*>$/, // <password>
+  /^\{\{[^{}]*\}\}$/, // {{ password }}
+  /^\*+$/, // ********
+  // The whole password is a placeholder word or a well-known default login
+  // of a local development database.
+  /^(?:(?:your|my|the)?[_-]?)(?:password|passwd|pass|pwd|secret|token|changeme|example|redacted|placeholder|postgres|root|admin|test|guest|demo|default|user|username|mysql|redis)$/i,
+];
+
+function isUrlPassword(value: string): boolean {
+  return (
+    !URL_PASSWORD_PLACEHOLDERS.some((placeholder) => placeholder.test(value)) &&
+    !/^(.)\1*$/.test(value)
+  );
 }
 
 const SECRET_PATTERNS: SecretPattern[] = [
@@ -41,6 +67,28 @@ const SECRET_PATTERNS: SecretPattern[] = [
   prefixed("sk_live_", "[sr]k_live_[0-9A-Za-z]{16,}"),
   prefixed("npm_", "npm_[A-Za-z0-9]{36}"),
   prefixed("hf_", "hf_[A-Za-z0-9]{30,}"),
+  // Notion integration tokens and Supabase personal access tokens.
+  prefixed("ntn_", "ntn_[A-Za-z0-9]{20,}"),
+  prefixed("sbp_", "sbp_[A-Za-z0-9]{20,}"),
+  // JSON Web Tokens: base64url header and payload, then a signature. Both
+  // JSON parts start with `{`: `eyJ` is `{"`, `eyA` is `{ ` and `ew` is `{`
+  // plus a newline or tab. Truncated examples such as `eyJhbGciOi...` do not
+  // match.
+  prefixed(
+    "JWT",
+    String.raw`e[yw][A-Za-z0-9_-]{8,}\.e[yw][A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{10,}`,
+  ),
+  // `scheme://user:password@host`. Only the password is the secret, and
+  // `https://user@host` has none. The user part may be empty (`redis://:pw@`).
+  // The authority ends at `/`, `?`, `#`, whitespace or a quote, and the last
+  // `@` before that ends the userinfo, as in a URL parser: a raw `@` inside
+  // the password (`Pw@ss1234`) is masked with the rest.
+  {
+    name: "URL credentials",
+    pattern: /(?<=:\/\/)[^\s/:@]{0,128}:([^\s/?#"'`]{1,2048})@/g,
+    group: 1,
+    accept: isUrlPassword,
+  },
   prefixed("PRIVATE KEY", "-----BEGIN [A-Z ]*PRIVATE KEY-----"),
   // "Bearer token" and "Bearer YOUR_API_KEY" are prose and placeholders.
   // A credential is long and, unlike an English word, contains a digit.
@@ -52,6 +100,8 @@ const SECRET_PATTERNS: SecretPattern[] = [
     },
   },
 ];
+
+const FULL_MASK_PATTERNS = new Set(["URL credentials"]);
 
 interface RawMatch extends SecretMatch {
   start: number;
@@ -65,19 +115,37 @@ interface RawMatch extends SecretMatch {
  */
 function scan(text: string): RawMatch[] {
   const results: RawMatch[] = [];
-  for (const { name, pattern, accept } of SECRET_PATTERNS) {
-    for (const match of text.matchAll(new RegExp(pattern.source, pattern.flags))) {
-      const value = match[0];
+  for (const { name, pattern, accept, group } of SECRET_PATTERNS) {
+    const flags = group === undefined ? pattern.flags : `${pattern.flags}d`;
+    for (const match of text.matchAll(new RegExp(pattern.source, flags))) {
+      const span =
+        group === undefined ? undefined : match.indices?.[group] ?? undefined;
+      if (group !== undefined && span === undefined) continue;
+      const start = span ? span[0] : match.index;
+      const value = span ? text.slice(span[0], span[1]) : match[0];
       if (accept && !accept(value)) continue;
-      results.push({
-        pattern: name,
-        value,
-        start: match.index,
-        end: match.index + value.length,
-      });
+      results.push({ pattern: name, value, start, end: start + value.length });
     }
   }
-  return results;
+  return dropContained(results);
+}
+
+/**
+ * A secret inside a larger match ("Bearer eyJ…") is the same finding, not a
+ * second one. Redaction already merges such spans; detection reports the
+ * outer pattern only.
+ */
+function dropContained(matches: RawMatch[]): RawMatch[] {
+  return matches.filter(
+    (a, i) =>
+      !matches.some(
+        (b, j) =>
+          j !== i &&
+          b.start <= a.start &&
+          a.end <= b.end &&
+          (b.end - b.start > a.end - a.start || j < i),
+      ),
+  );
 }
 
 /**
@@ -120,6 +188,15 @@ export function maskSecret(value: string): string {
 }
 
 /**
+ * Masks a reported match. Credentials whose value is only a password are
+ * masked completely, since keeping a few characters of a short password
+ * would reveal much of it.
+ */
+export function maskSecretMatch(match: SecretMatch): string {
+  return FULL_MASK_PATTERNS.has(match.pattern) ? "***" : maskSecret(match.value);
+}
+
+/**
  * Masks every secret-looking string in arbitrary rendered output.
  *
  * KASANE007 masks the value it reports, but the same secret can still
@@ -142,12 +219,15 @@ export function redactSecrets(text: string): string {
     // Overlapping matches ("Bearer sk-…") are masked as one span.
     const start = matches[index].start;
     let end = matches[index].end;
+    let full = FULL_MASK_PATTERNS.has(matches[index].pattern);
     index += 1;
     while (index < matches.length && matches[index].start < end) {
       end = Math.max(end, matches[index].end);
+      full &&= FULL_MASK_PATTERNS.has(matches[index].pattern);
       index += 1;
     }
-    redacted += text.slice(cursor, start) + maskSecret(text.slice(start, end));
+    redacted +=
+      text.slice(cursor, start) + (full ? "***" : maskSecret(text.slice(start, end)));
     cursor = end;
   }
   return redacted + text.slice(cursor);

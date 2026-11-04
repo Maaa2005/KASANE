@@ -7,7 +7,7 @@ KASANE is pre-1.0. Security fixes are made against the latest published
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | ✅        |
+| 0.3.x   | ✅        |
 
 ## Reporting a Vulnerability
 

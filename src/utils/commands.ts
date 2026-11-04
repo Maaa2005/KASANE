@@ -357,6 +357,21 @@ function extractFromSegment(segment: string, inCode: boolean): DetectedCommand[]
 }
 
 /**
+ * How much of each line is scanned. Command extraction re-splits the rest
+ * of a segment at every manager name, which is quadratic on a very long
+ * line; a real command is nowhere near this long.
+ */
+const MAX_SCANNED_LINE_LENGTH = 4000;
+
+function capLines(text: string): string {
+  if (text.length <= MAX_SCANNED_LINE_LENGTH) return text;
+  return text
+    .split("\n")
+    .map((line) => line.slice(0, MAX_SCANNED_LINE_LENGTH))
+    .join("\n");
+}
+
+/**
  * Extracts npm/pnpm/yarn/bun script invocations from instruction text.
  * Used by KASANE003.
  *
@@ -373,8 +388,9 @@ export function extractPackageManagerCommands(
   text: string,
   { command = false }: { command?: boolean } = {},
 ): DetectedCommand[] {
-  const cd = CHANGE_DIRECTORY_PATTERN.exec(text);
-  const checked = cd ? text.slice(0, cd.index) : text;
+  const capped = capLines(text);
+  const cd = CHANGE_DIRECTORY_PATTERN.exec(capped);
+  const checked = cd ? capped.slice(0, cd.index) : capped;
 
   const codeSpans = command
     ? [checked]
@@ -457,16 +473,63 @@ const NEGATED_MANAGER_PATTERNS = [
   ),
 ];
 
+const NPM_OPTION_VALUE_FLAGS =
+  "registry|prefix|userconfig|globalconfig|cache|otp|tag|scope|workspace|loglevel|location";
+
+/**
+ * Options npm accepts before the subcommand: `-x`, `--flag`, `--flag=value`
+ * and `--flag value` for flags that take a value.
+ */
+const NPM_LEADING_OPTIONS = String.raw`(?:\s+(?:--(?:${NPM_OPTION_VALUE_FLAGS})\s+[^\s-]\S*|-[wC]\s+[^\s-]\S*|-{1,2}[A-Za-z][\w-]*(?:=\S*)?))*`;
+
+/**
+ * `npm` subcommands that exist only on npm (registry and package metadata
+ * work), which pnpm and yarn repositories run through npm as well.
+ */
+const NPM_ONLY_COMMAND_PATTERN = new RegExp(
+  String.raw`\bnpm${NPM_LEADING_OPTIONS}\s+(?:publish|view|audit|pack|version|login|logout|whoami|dist-tag|deprecate|token|owner|access|adduser|profile|star)\b`,
+  "g",
+);
+
+/**
+ * `npm install -g pnpm`: npm is only the bootstrap for another tool, and the
+ * packages it installs (often pnpm or yarn itself) are not the repository's
+ * manager either. Only `-g`, `--global`, `--global=true` and
+ * `--location=global` make it global: `--global=false` and `--global-style`
+ * do not.
+ */
+const NPM_GLOBAL_INSTALL_PATTERN =
+  /\bnpm\s+(?:i|install|add)\b(?=[^\n;&|`]*\s(?:-g|--global(?:=true)?|--location(?:=|\s+)global)(?![\w=-]))[^\n;&|`]*/g;
+
+/**
+ * One character of the text between "Node" and "npm" in a version
+ * requirement. A sentence end (`.`, `;`, `:`, `!`, `?`, newline) stops it,
+ * but the dots inside a version (`20.11.0`, `20.x`), the dot of `Node.js`
+ * and a colon that introduces a version (`Node: 20`) do not.
+ */
+const NPM_REQUIREMENT_GAP =
+  String.raw`(?:[^.;:!?\n]|(?<=[\dx*])\.(?=[\dx*])|(?<=\bnode)\.(?=js\b)|:(?=\s*[v<>=^~\d]))`;
+
+/**
+ * "Requires Node 20 and npm 10": a version requirement for the npm that
+ * ships with Node, not an instruction to run npm. Only the `npm` is
+ * dropped, so other managers in the sentence still count.
+ */
+const NPM_VERSION_REQUIREMENT_PATTERN = new RegExp(
+  String.raw`(\b(?:requires?|required|needs?|node(?:\.js)?|engines?|supports?)\b${NPM_REQUIREMENT_GAP}{0,60}?)\bnpm(?=\s*(?:@|:|[<>]=?|=|\^|~)?\s*v?\d)`,
+  "gi",
+);
+
 /**
  * "npm" as the registry or the ecosystem rather than the CLI: "publish to
  * npm", "an npm package", "npm scripts". These say nothing about which
  * package manager to run.
  */
 const GENERIC_NPM_PATTERNS = [
-  /\bnpm\s+(?:registry|packages?|modules?|scripts?|org(?:anization)?|account|scope|ecosystem|page|badge)\b/g,
-  /\b(?:on|from)\s+(?:the\s+)?npm\b(?!\s+(?:install|i|ci|run|test|exec|start)\b)/g,
   // "npm install -g pnpm" installs the manager to use, not npm's packages.
   /\bnpm(?=\s+(?:install|i|add)\s+(?:-\S+\s+)*(?:pnpm|yarn|bun)(?![\w-]))/g,
+  /\bnpm\s+(?:registry|packages?|modules?|scripts?|org(?:anization)?|account|scope|ecosystem|page|badge)\b/g,
+  /\b(?:on|from)\s+(?:the\s+)?npm\b(?!\s+(?:install|i|ci|run|test|exec|start)\b)/g,
   // "Publish the package to npm", but not "switch to npm".
   /(?<=\b(?:publish|publishes|published|publishing|release|releases|released|releasing|upload|uploads|uploaded|uploading|push|pushes|pushed|pushing)\b[^.;:!?\n]{0,40}?\bto\s+(?:the\s+)?)npm\b/gi,
 ];
@@ -474,11 +537,34 @@ const GENERIC_NPM_PATTERNS = [
 /**
  * Extracts package manager names the text tells an agent to use, ignoring
  * ones it explicitly tells the agent not to use. Used by KASANE004.
+ *
+ * Pass the manager the repository uses as `expected`. When it is not npm,
+ * npm-only subcommands (`npm publish`, `npm view`, ...) are not counted as
+ * a mention: no other manager has them, so running them says nothing about
+ * how to install or run scripts.
  */
-export function extractMentionedManagers(text: string): PackageManager[] {
-  const positive = [...NEGATED_MANAGER_PATTERNS, ...GENERIC_NPM_PATTERNS].reduce(
+export function extractMentionedManagers(
+  text: string,
+  expected?: PackageManager,
+): PackageManager[] {
+  // With a known manager, a global install through npm is only bootstrapping
+  // and says nothing about the repository (KASANE004). Without one (`diff`),
+  // it names the manager it installs. The global pattern runs first, since it
+  // erases the installed manager too.
+  const patterns =
+    expected === undefined
+      ? [...NEGATED_MANAGER_PATTERNS, ...GENERIC_NPM_PATTERNS]
+      : [
+          NPM_GLOBAL_INSTALL_PATTERN,
+          ...NEGATED_MANAGER_PATTERNS,
+          ...GENERIC_NPM_PATTERNS,
+        ];
+  if (expected !== undefined && expected !== "npm") {
+    patterns.push(NPM_ONLY_COMMAND_PATTERN);
+  }
+  const positive = patterns.reduce(
     (remaining, pattern) => remaining.replace(pattern, " "),
-    text,
+    text.replace(NPM_VERSION_REQUIREMENT_PATTERN, "$1 "),
   );
   const matches = positive.match(MANAGER_MENTION_PATTERN) ?? [];
   return Array.from(new Set(matches)) as PackageManager[];

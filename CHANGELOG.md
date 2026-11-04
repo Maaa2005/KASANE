@@ -24,6 +24,47 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   with a known program. In `--format json` such an instruction carries the
   raw `command`.
 
+### Security
+
+- Secret detection and masking now cover credentials in URLs
+  (`scheme://user:password@host`, where only the password is masked; a URL
+  with a user name and no password is not flagged), JWTs (`eyJ...`), Notion
+  `ntn_` tokens and Supabase `sbp_` tokens. Everything KASANE007 reports is
+  masked in `explain`, `diff` and `inspect`, including `--include-content`.
+- URL passwords are skipped as placeholders only when the whole password has
+  an exact placeholder shape (`${VAR}`, `$VAR`, `<...>`, `{{...}}`, `****`,
+  one repeated character, or a word such as `password` or `postgres`).
+  `%40ProdPass7`, passwords starting with `$`, and numeric passwords such as
+  `48213` are now flagged and masked. Passwords up to 2048 characters are
+  matched (was 256), so a long password no longer leaks.
+- JWTs whose header or payload JSON contains whitespace (base64 `eyA...` or
+  `ew...`) are detected and masked.
+- A secret contained in a larger match (a JWT after `Bearer`) is reported
+  once, as the outer match.
+
+### Fixed
+
+- KASANE004 recognizes more npm version requirements in a pnpm or yarn
+  repository: versions with dots (`Node 20.11 and npm 10.`, `20.x`),
+  `>=`, `npm@10`, and `Node: 20 / npm: 10`. `run npm install.` is still
+  reported.
+- A URL password containing a raw `@` (`postgres://u:Pw@ss1234@host`) is
+  masked in full; the last `@` before the host ends the user info.
+
+- KASANE004 skips options before an npm-only subcommand
+  (`npm --registry=https://registry.npmjs.org publish`, `npm --prefix app
+  version`), and also treats `token`, `logout`, `owner`, `access`, `adduser`,
+  `profile` and `star` as npm-only. `npm install --global=false` and
+  `npm install pkg --global-style` are no longer treated as global installs;
+  only `-g`, `--global`, `--global=true` and `--location=global` are.
+- KASANE004 no longer warns, in a pnpm or yarn repository, about npm-only
+  subcommands (`npm publish`, `view`, `audit`, `pack`, `version`, `login`,
+  `whoami`, `dist-tag`, `deprecate`), about `npm install -g ...` /
+  `npm i -g ...`, or about prose such as "Requires Node 20 and npm 10".
+- Command extraction was quadratic on very long lines (a 120 KB line of
+  repeated `npm ` took about 40 seconds). Only the first 4000 characters of
+  each line are scanned now.
+
 ### Changed
 
 - A shell code block inside a list item is no longer part of the item's
@@ -37,6 +78,12 @@ it reaches 1.0.0. Before 1.0.0, minor versions may include breaking changes.
   `paths: packages/web/**` in a root rule can run `packages/web` scripts.
 - `npm install -g pnpm` (or yarn, bun) counts as naming the manager it
   installs, not npm, for KASANE004 and `diff`.
+- Updated `minimatch` to ^11. Both call sites (`--path` and Cursor `globs`
+  matching) behave as before.
+- Removed `zod` from dependencies; it was never imported.
+- README: lists the rule IDs KASANE001 to KASANE007 and no longer carries the
+  internal release checklist (moved to `docs/releasing.md`).
+- SECURITY.md: the supported version is now 0.3.x.
 
 ## [0.3.1] - 2026-10-23
 

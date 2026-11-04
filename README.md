@@ -166,6 +166,20 @@ invalid arguments (unknown option, bad `--format`, `--root` that is not a
 directory, `--path` outside the repository), `3` the analysis failed,
 `4` unexpected error.
 
+## Rules
+
+Every diagnostic carries one of these IDs.
+
+| ID | Severity | What it reports |
+| --- | --- | --- |
+| `KASANE001` | warning | The same instruction appears in more than one context file |
+| `KASANE002` | error | A referenced file does not exist |
+| `KASANE003` | error | An instruction runs a `package.json` script that does not exist |
+| `KASANE004` | warning / error | An instruction names a different package manager than the lockfile or `packageManager` field; also conflicting lockfiles, or a declaration that disagrees with the lockfile |
+| `KASANE005` | warning | A context file (over 4,000 estimated tokens) or the whole context (over 8,000) is large |
+| `KASANE006` | warning | A machine-specific absolute path that will not resolve on other machines |
+| `KASANE007` | error | A string that looks like a known API key or token, a private key header, a Bearer token, or a password inside a URL (`scheme://user:password@host`); detected values are always masked in output. Passwords written as `key=value` (`DB_PASSWORD=...`, `password: ...`) are not detected yet |
+
 ## Supported agents / config files
 
 | Agent          | File(s)                                                             |
@@ -201,23 +215,13 @@ to work under `backend/`. Frontmatter that is not valid YAML is ignored, as
 Claude Code ignores it, so `paths: **/*.ts` without quotes loads the rule
 everywhere.
 
-Commands in shell code blocks (`bash`, `sh`, `shell`, `zsh`, `console`,
-`powershell`, `cmd` and similar) are compared and checked like commands in
-prose, one instruction per command. A block without a language is read only
-when every line starts with a known program (`npm`, `git`, `make`, …), so
-directory trees and sample output are not taken for commands. In a
-transcript (`console`, or `$ ` prompts) only the prompted lines are commands.
-Comments are dropped, continued lines (`\`, `` ` ``, `^`) are joined, and a
-heredoc's body is skipped. A `cd` and the commands after it in the same
-block form one instruction, which KASANE003 does not check against the root
-`package.json`. Paths in commands are not checked by KASANE002, because a
-command also names the files it creates.
-
-### Known limitations (not reproduced in v0.3.0)
+### Known limitations (not reproduced in v0.3.1)
 
 KASANE only reconstructs context that can be resolved by **static
 analysis**. The following are intentionally out of scope for now:
 
+- Commands beyond the first 4000 characters of a line are not checked by
+  the command rules (KASANE003 and KASANE004)
 - Whether an agent actually loads a description-matched rule at runtime
   (an Agent-Requested rule is reported as reaching its whole subtree,
   which is an upper bound, not a prediction)
@@ -285,21 +289,6 @@ formats are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) and our
 ## Security
 
 See [SECURITY.md](./SECURITY.md) for how to report a vulnerability.
-
-## Release checklist
-
-Kept here as a record of how v0.2.0 was released. Only step 7 is still open.
-
-1. Done: pushed to https://github.com/Maaa2005/KASANE (default branch `main`)
-2. Done: `kasane` was already taken on npm, so the package is published as
-   `kasane-cli` (`package.json` `name`), with the binary still named `kasane`
-3. Done: `docs/make-demo.sh` records `docs/demo.gif`, embedded at the top of
-   this README
-4. Done: "Why KASANE" carries a comparison against agentlinter,
-   ai-context-kit and cursor-doctor
-5. Done: published as `kasane-cli@0.2.0` by tag-pushing `v0.2.0`
-6. Done: https://github.com/Maaa2005/KASANE/releases/tag/v0.2.0
-7. Post the initial announcement per the launch plan (計画書.md §26)
 
 ## Changelog
 
